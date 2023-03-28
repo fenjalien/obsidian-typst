@@ -1,7 +1,8 @@
 # Obsidian Typst
 
-Renders `typst` code blocks into images using [Typst](https://github.com/typst/typst) through the power of WASM!
+Renders `typst` code blocks into images using [Typst](https://github.com/typst/typst) through the power of WASM! This is still very much in development, so suggestions/bugs are welcome!
 
+**NOTE**: The plugin has to load fonts at startup, which on my machine takes about 20s but after that its *heckin* fast.
 ## Example
 
 ```
@@ -36,3 +37,6 @@ The first #count numbers of the sequence are:
 ```
 
 <img src="assets/example.png">
+
+## Installation
+Until this plugin is submitted to the community plugins please install it by copying `main.js`, `styles.css`, and `manifest.json` from the releases tab to the folder `.obsidian/plugins/obsidian-typst`.
