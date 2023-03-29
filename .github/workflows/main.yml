@@ -19,8 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3.3.0
-      - name: Setup wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - uses: actions-rs/toolchain@v1
+      - run: cargo install wasm-bindgen-cli --git https://github.com/fenjalien/wasm-bindgen.git
       - name: Setup Node
         uses: actions/setup-node@v3.6.0
         with:
