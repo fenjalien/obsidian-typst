@@ -1,0 +1,49 @@
+on: 
+  push:
+    tags: 
+      - '*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Test scenario tags'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+name: Publish Release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3.3.0
+      - name: Setup wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - name: Setup Node
+        uses: actions/setup-node@v3.6.0
+        with:
+          node-version: latest
+      - name: Install Dependencies
+        run: npm install
+      - name: Build
+        run: npm run wasm-build
+      - name: Release
+        if: ${{github.ref_type == 'tag'}}
+        uses: softprops/action-gh-release@v0.1.15
+        with: 
+          tag_name: ${{ github.ref_name }}
+          files: |
+            main.js
+            styles.css
+            manifest.json
+      - name: Manual Release
+        if: ${{github.ref_type != 'tag'}}
+        uses: softprops/action-gh-release@v0.1.15
+        with: 
+          tag_name: ${{ inputs.tag }}
+          files: |
+            main.js
+            styles.css
+            manifest.json
