@@ -137,16 +137,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "22bf2c21093020535dd771993fedae8dd55393a4258cca501a9b55a962d350a5"
 dependencies = [
- "comemo-macros 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "siphasher",
-]
-
-[[package]]
-name = "comemo"
-version = "0.2.0"
-source = "git+https://github.com/typst/comemo#19cb91349d67a22dc8723fce3879a6af3730ecba"
-dependencies = [
- "comemo-macros 0.2.0 (git+https://github.com/typst/comemo)",
+ "comemo-macros",
  "siphasher",
 ]
 
@@ -155,16 +146,6 @@ name = "comemo-macros"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9faa23f4534253fa656b176ff524d5cd7306a6fed3048929f9cc01ab38ab5a5a"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "comemo-macros"
-version = "0.2.0"
-source = "git+https://github.com/typst/comemo#19cb91349d67a22dc8723fce3879a6af3730ecba"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -507,7 +488,7 @@ checksum = "e25be21376a772d15f97ae789845340a9651d3c4246ff5ebb6a2b35f9c37bd31"
 name = "obsidian-typst"
 version = "0.1.0"
 dependencies = [
- "comemo 0.2.0 (git+https://github.com/typst/comemo)",
+ "comemo",
  "elsa",
  "js-sys",
  "once_cell",
@@ -998,7 +979,7 @@ source = "git+https://github.com/typst/typst.git#e13fc04c3e973da60d5f4e9cc6fc381
 dependencies = [
  "bitflags",
  "bytemuck",
- "comemo 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "comemo",
  "ecow",
  "flate2",
  "if_chain",
@@ -1033,7 +1014,7 @@ name = "typst-library"
 version = "0.0.0"
 source = "git+https://github.com/typst/typst.git#e13fc04c3e973da60d5f4e9cc6fc38105cd2ddf9"
 dependencies = [
- "comemo 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "comemo",
  "csv",
  "ecow",
  "hayagriva",
