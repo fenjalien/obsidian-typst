@@ -40,3 +40,11 @@ The first #count numbers of the sequence are:
 
 ## Installation
 Until this plugin is submitted to the community plugins please install it by copying `main.js`, `styles.css`, and `manifest.json` from the releases tab to the folder `.obsidian/plugins/obsidian-typst`.
+
+## TODO / Goals (In no particular order)
+- [ ] Better font loading
+- [ ] Fix Github Actions
+- [ ] Fix output image scaling
+- [ ] Use HTML output
+- [ ] Override default equation rendering
+- [ ] Custom editor for `.typ` files
