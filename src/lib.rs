@@ -55,9 +55,13 @@ pub struct SystemWorld {
 #[wasm_bindgen]
 impl SystemWorld {
     #[wasm_bindgen(constructor)]
-    pub async fn new(root: String) -> Result<SystemWorld, JsValue> {
+    pub async fn new(root: String, search_system: bool) -> Result<SystemWorld, JsValue> {
         let mut searcher = FontSearcher::new();
-        searcher.search_system().await?;
+        if search_system {
+            searcher.search_system().await?;
+        } else {
+            searcher.add_embedded();
+        }
 
         Ok(Self {
             root: PathBuf::from(root),
@@ -77,6 +81,11 @@ impl SystemWorld {
         pixel_per_pt: f32,
         fill: String,
     ) -> Result<ImageData, JsValue> {
+
+        self.sources.as_mut().clear();
+        self.hashes.borrow_mut().clear();
+        self.paths.borrow_mut().clear();
+
         self.main = self.insert("<user input>".as_ref(), source);
         match typst::compile(self) {
             Ok(document) => {
@@ -110,6 +119,8 @@ impl World for SystemWorld {
     }
 
     fn resolve(&self, path: &Path) -> FileResult<SourceId> {
+        let path = self.root.join(path);
+        let path = path.as_path();
         self.slot(path)?
             .source
             .get_or_init(|| {
@@ -136,6 +147,8 @@ impl World for SystemWorld {
     }
 
     fn file(&self, path: &Path) -> FileResult<Buffer> {
+        let path = self.root.join(path);
+        let path = path.as_path();
         self.slot(path)?
             .buffer
             .get_or_init(|| read(path).map(Buffer::from))

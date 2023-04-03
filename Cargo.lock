@@ -279,6 +279,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "hashbrown"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
+
+[[package]]
 name = "hayagriva"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -344,6 +350,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "indexmap"
+version = "1.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd070e393353796e801d209ad339e89596eb4c8d430d18ede6a1cced8fafbd99"
+dependencies = [
+ "autocfg",
+ "hashbrown",
+]
+
+[[package]]
 name = "isolang"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -373,7 +389,7 @@ checksum = "bc0000e42512c92e31c2252315bda326620a4e034105e900c98ec492fa077b3e"
 [[package]]
 name = "js-sys"
 version = "0.3.61"
-source = "git+https://github.com/fenjalien/wasm-bindgen.git#525769565a99aebd74a78cdfb045eab0f903f888"
+source = "git+https://github.com/fenjalien/wasm-bindgen.git#584383028e0fdb4bad927b4f886714ddfad2cd95"
 dependencies = [
  "wasm-bindgen",
 ]
@@ -584,9 +600,9 @@ checksum = "5b40af805b3121feab8a3c29f04d8ad262fa8e0561883e7653e024ae4479e6de"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.54"
+version = "1.0.56"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e472a104799c74b514a57226160104aa483546de37e839ec50e3c2e41dd87534"
+checksum = "2b63bdb0cd06f1f4dedf69b254734f9b45af66e4a031e42a7480257d9898b435"
 dependencies = [
  "unicode-ident",
 ]
@@ -757,7 +773,7 @@ checksum = "4c614d17805b093df4b147b51339e7e44bf05ef59fba1e45d83500bcfb4d8585"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.11",
+ "syn 2.0.13",
 ]
 
 [[package]]
@@ -769,6 +785,18 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
+]
+
+[[package]]
+name = "serde_yaml"
+version = "0.8.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "578a7433b776b56a35785ed5ce9a7e777ac0598aac5a6dd1b4b18a307c7fc71b"
+dependencies = [
+ "indexmap",
+ "ryu",
+ "serde",
+ "yaml-rust",
 ]
 
 [[package]]
@@ -860,9 +888,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.11"
+version = "2.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21e3787bb71465627110e7d87ed4faaa36c1f61042ee67badb9e2ef173accc40"
+checksum = "4c9da457c5285ac1f936ebd076af6dac17a61cfe7826f2076b4d015cf47bc8ec"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -913,7 +941,7 @@ checksum = "f9456a42c5b0d803c8cd86e73dd7cc9edd429499f37a3550d286d5e86720569f"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.11",
+ "syn 2.0.13",
 ]
 
 [[package]]
@@ -975,7 +1003,7 @@ checksum = "6af6ae20167a9ece4bcb41af5b80f8a1f1df981f6391189ce00fd257af04126a"
 [[package]]
 name = "typst"
 version = "0.0.0"
-source = "git+https://github.com/typst/typst.git#e13fc04c3e973da60d5f4e9cc6fc38105cd2ddf9"
+source = "git+https://github.com/typst/typst.git#2c735294cd5e47f1f1eb6402a3b8c500dccd047b"
 dependencies = [
  "bitflags",
  "bytemuck",
@@ -1012,7 +1040,7 @@ dependencies = [
 [[package]]
 name = "typst-library"
 version = "0.0.0"
-source = "git+https://github.com/typst/typst.git#e13fc04c3e973da60d5f4e9cc6fc38105cd2ddf9"
+source = "git+https://github.com/typst/typst.git#2c735294cd5e47f1f1eb6402a3b8c500dccd047b"
 dependencies = [
  "comemo",
  "csv",
@@ -1026,6 +1054,7 @@ dependencies = [
  "roxmltree",
  "rustybuzz",
  "serde_json",
+ "serde_yaml",
  "smallvec",
  "syntect",
  "ttf-parser 0.18.1",
@@ -1041,7 +1070,7 @@ dependencies = [
 [[package]]
 name = "typst-macros"
 version = "0.0.0"
-source = "git+https://github.com/typst/typst.git#e13fc04c3e973da60d5f4e9cc6fc38105cd2ddf9"
+source = "git+https://github.com/typst/typst.git#2c735294cd5e47f1f1eb6402a3b8c500dccd047b"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -1181,7 +1210,7 @@ dependencies = [
 [[package]]
 name = "wasm-bindgen"
 version = "0.2.84"
-source = "git+https://github.com/fenjalien/wasm-bindgen.git#525769565a99aebd74a78cdfb045eab0f903f888"
+source = "git+https://github.com/fenjalien/wasm-bindgen.git#584383028e0fdb4bad927b4f886714ddfad2cd95"
 dependencies = [
  "cfg-if",
  "wasm-bindgen-macro",
@@ -1190,21 +1219,21 @@ dependencies = [
 [[package]]
 name = "wasm-bindgen-backend"
 version = "0.2.84"
-source = "git+https://github.com/fenjalien/wasm-bindgen.git#525769565a99aebd74a78cdfb045eab0f903f888"
+source = "git+https://github.com/fenjalien/wasm-bindgen.git#584383028e0fdb4bad927b4f886714ddfad2cd95"
 dependencies = [
  "bumpalo",
  "log",
  "once_cell",
  "proc-macro2",
  "quote",
- "syn 2.0.11",
+ "syn 2.0.13",
  "wasm-bindgen-shared",
 ]
 
 [[package]]
 name = "wasm-bindgen-futures"
 version = "0.4.34"
-source = "git+https://github.com/fenjalien/wasm-bindgen.git#525769565a99aebd74a78cdfb045eab0f903f888"
+source = "git+https://github.com/fenjalien/wasm-bindgen.git#584383028e0fdb4bad927b4f886714ddfad2cd95"
 dependencies = [
  "cfg-if",
  "js-sys",
@@ -1215,7 +1244,7 @@ dependencies = [
 [[package]]
 name = "wasm-bindgen-macro"
 version = "0.2.84"
-source = "git+https://github.com/fenjalien/wasm-bindgen.git#525769565a99aebd74a78cdfb045eab0f903f888"
+source = "git+https://github.com/fenjalien/wasm-bindgen.git#584383028e0fdb4bad927b4f886714ddfad2cd95"
 dependencies = [
  "quote",
  "wasm-bindgen-macro-support",
@@ -1224,11 +1253,11 @@ dependencies = [
 [[package]]
 name = "wasm-bindgen-macro-support"
 version = "0.2.84"
-source = "git+https://github.com/fenjalien/wasm-bindgen.git#525769565a99aebd74a78cdfb045eab0f903f888"
+source = "git+https://github.com/fenjalien/wasm-bindgen.git#584383028e0fdb4bad927b4f886714ddfad2cd95"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.11",
+ "syn 2.0.13",
  "wasm-bindgen-backend",
  "wasm-bindgen-shared",
 ]
@@ -1236,12 +1265,12 @@ dependencies = [
 [[package]]
 name = "wasm-bindgen-shared"
 version = "0.2.84"
-source = "git+https://github.com/fenjalien/wasm-bindgen.git#525769565a99aebd74a78cdfb045eab0f903f888"
+source = "git+https://github.com/fenjalien/wasm-bindgen.git#584383028e0fdb4bad927b4f886714ddfad2cd95"
 
 [[package]]
 name = "web-sys"
 version = "0.3.61"
-source = "git+https://github.com/fenjalien/wasm-bindgen.git#525769565a99aebd74a78cdfb045eab0f903f888"
+source = "git+https://github.com/fenjalien/wasm-bindgen.git#584383028e0fdb4bad927b4f886714ddfad2cd95"
 dependencies = [
  "js-sys",
  "wasm-bindgen",

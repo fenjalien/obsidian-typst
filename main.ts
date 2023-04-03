@@ -1,4 +1,4 @@
-import { App, HexString, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, FileSystemAdapter, HexString, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
 
 
 // @ts-ignore
@@ -11,12 +11,14 @@ interface TypstPluginSettings {
     noFill: boolean,
     fill: HexString,
     pixel_per_pt: number,
+    search_system: boolean,
 }
 
 const DEFAULT_SETTINGS: TypstPluginSettings = {
     noFill: false,
     fill: "#ffffff",
-    pixel_per_pt: 1
+    pixel_per_pt: 1,
+    search_system: false,
 }
 
 export default class TypstPlugin extends Plugin {
@@ -25,26 +27,26 @@ export default class TypstPlugin extends Plugin {
 
     async onload() {
         await typstInit(typst_wasm_bin)
-        this.loadSettings()
-        let notice = new Notice("Loading fonts for Typst...")
-        this.compiler = await new typst.SystemWorld(this.app.vault.getRoot().path);
+        await this.loadSettings()
+        let notice = new Notice("Loading fonts for Typst...");
+        this.compiler = await new typst.SystemWorld((this.app.vault.adapter as FileSystemAdapter).getBasePath(), this.settings.search_system);
         notice.hide();
         notice = new Notice("Finished loading fonts for Typst", 5000);
 
         this.addSettingTab(new TypstSettingTab(this.app, this));
-        this.registerMarkdownCodeBlockProcessor("typst", (source, el, ctx) => {
+        this.registerMarkdownCodeBlockProcessor("typst", async (source, el, ctx) => {
             try {
                 const image = this.compiler.compile(source, this.settings.pixel_per_pt, `${this.settings.fill}${this.settings.noFill ? "00" : "ff"}`);
+                const bitmap = await createImageBitmap(image, { resizeWidth: 700, resizeHeight: image.height * (700 / image.width), resizeQuality: "high" })
                 let canvas = el.createEl("canvas", {
                     cls: "obsidian-typst",
                     attr: {
-                        width: image.width,
-                        height: image.height,
+                        width: bitmap.width,
+                        height: bitmap.height,
                     }
-
                 });
                 let ctx = canvas.getContext("2d");
-                ctx?.putImageData(image, 0, 0);
+                ctx?.drawImage(bitmap, 0, 0);
             } catch (error) {
                 console.error(error);
             }
@@ -141,5 +143,17 @@ class TypstSettingTab extends PluginSettingTab {
                             await this.plugin.saveSettings();
                         }
                     ))
+        new Setting(containerEl)
+            .setName("Search System Fonts")
+            .setDesc(`Whether the plugin should search for system fonts.
+            This is off by default as it takes around 20 seconds to complete but it gives access to more fonts.
+            Requires reload of plugin.`)
+            .addToggle((toggle) => {
+                toggle.setValue(this.plugin.settings.search_system)
+                    .onChange(async (value) => {
+                        this.plugin.settings.search_system = value;
+                        await this.plugin.saveSettings();
+                    })
+            })
     }
 }
