@@ -1,6 +1,4 @@
-import { App, FileSystemAdapter, HexString, Notice, Plugin, PluginSettingTab, Setting, TFile, TFolder, arrayBufferToBase64 } from 'obsidian';
-
-import { Base64 } from "js-base64"
+import { App, HexString, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
 
 // @ts-ignore
 import typst_wasm_bin from './pkg/obsidian_typst_bg.wasm'
