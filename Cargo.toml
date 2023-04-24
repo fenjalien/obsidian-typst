@@ -11,8 +11,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # Everything to do with Typst
-typst = { git = "https://github.com/typst/typst.git" }
-typst-library = { git = "https://github.com/typst/typst.git" }
+typst = { git = "https://github.com/typst/typst.git", version = "0.2" }
+typst-library = { git = "https://github.com/typst/typst.git", version = "0.2" }
 comemo = "0.2"
 
 once_cell = "1.17.1"
@@ -35,5 +35,5 @@ js-sys = { git = "https://github.com/fenjalien/wasm-bindgen.git" }
 wasm-bindgen-futures = { git = "https://github.com/fenjalien/wasm-bindgen.git" }
 wasm-bindgen = { git = "https://github.com/fenjalien/wasm-bindgen.git" }
 
-[profile.release]
-debug = true
+# [profile.release]
+# debug = true

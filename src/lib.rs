@@ -1,6 +1,5 @@
 use comemo::Prehashed;
 use elsa::FrozenVec;
-use js_sys::Uint8Array;
 use once_cell::unsync::OnceCell;
 use siphasher::sip128::{Hasher128, SipHasher};
 use std::{
@@ -33,11 +32,6 @@ extern "C" {
     #[wasm_bindgen(catch)]
     fn readFileSync(path: &str) -> Result<JsValue, JsValue>;
 }
-#[wasm_bindgen(module = "utils")]
-extern "C" {
-    async fn get_fonts() -> JsValue;
-    async fn get_local_fonts() -> JsValue;
-}
 
 /// A world that provides access to the operating system.
 #[wasm_bindgen]
@@ -46,16 +40,21 @@ pub struct SystemWorld {
     library: Prehashed<Library>,
     book: Prehashed<FontBook>,
     fonts: Vec<FontSlot>,
-    hashes: RefCell<HashMap<PathBuf, FileResult<PathHash>>>,
+    hashes: RefCell<HashMap<PathBuf, PathHash>>,
     paths: RefCell<HashMap<PathHash, PathSlot>>,
     sources: FrozenVec<Box<Source>>,
     main: SourceId,
+    js_read_file: js_sys::Function,
 }
 
 #[wasm_bindgen]
 impl SystemWorld {
     #[wasm_bindgen(constructor)]
-    pub async fn new(root: String, search_system: bool) -> Result<SystemWorld, JsValue> {
+    pub async fn new(
+        root: String,
+        js_read_file: &js_sys::Function,
+        search_system: bool,
+    ) -> Result<SystemWorld, JsValue> {
         let mut searcher = FontSearcher::new();
         if search_system {
             searcher.search_system().await?;
@@ -72,6 +71,7 @@ impl SystemWorld {
             paths: RefCell::default(),
             sources: FrozenVec::new(),
             main: SourceId::detached(),
+            js_read_file: js_read_file.clone(),
         })
     }
 
@@ -81,7 +81,6 @@ impl SystemWorld {
         pixel_per_pt: f32,
         fill: String,
     ) -> Result<ImageData, JsValue> {
-
         self.sources.as_mut().clear();
         self.hashes.borrow_mut().clear();
         self.paths.borrow_mut().clear();
@@ -124,7 +123,7 @@ impl World for SystemWorld {
         self.slot(path)?
             .source
             .get_or_init(|| {
-                let buf = read(path)?;
+                let buf = self.read_file(path)?;
                 let text = String::from_utf8(buf)?;
                 Ok(self.insert(path, text))
             })
@@ -151,7 +150,7 @@ impl World for SystemWorld {
         let path = path.as_path();
         self.slot(path)?
             .buffer
-            .get_or_init(|| read(path).map(Buffer::from))
+            .get_or_init(|| self.read_file(path).map(Buffer::from))
             .clone()
     }
 }
@@ -162,14 +161,14 @@ impl SystemWorld {
         let hash = match hashes.get(path).cloned() {
             Some(hash) => hash,
             None => {
-                let hash = PathHash::new(path);
+                let hash = PathHash::new(Buffer::from(self.read_file(&path)?));
                 if let Ok(canon) = path.canonicalize() {
                     hashes.insert(canon.normalize(), hash.clone());
                 }
                 hashes.insert(path.into(), hash.clone());
                 hash
             }
-        }?;
+        };
 
         Ok(std::cell::RefMut::map(self.paths.borrow_mut(), |paths| {
             paths.entry(hash).or_default()
@@ -182,15 +181,20 @@ impl SystemWorld {
         self.sources.push(Box::new(source));
         id
     }
-}
 
-fn read(path: &Path) -> FileResult<Vec<u8>> {
-    let f = |e: JsValue| {
-        console::log_1(&e);
-        FileError::Other
-    };
-
-    Ok(Uint8Array::new(&readFileSync(path.to_str().unwrap()).map_err(f)?).to_vec())
+    fn read_file(&self, path: &Path) -> FileResult<Vec<u8>> {
+        let f1 = |e: JsValue| {
+            console::error_1(&e);
+            FileError::Other
+        };
+        Ok(self
+            .js_read_file
+            .call1(&JsValue::NULL, &path.to_str().unwrap().into())
+            .map_err(f1)?
+            .as_string()
+            .unwrap()
+            .into_bytes())
+    }
 }
 
 /// Holds details about the location of a font and lazily the font itself.
@@ -205,11 +209,11 @@ struct FontSlot {
 struct PathHash(u128);
 
 impl PathHash {
-    fn new(path: &Path) -> FileResult<Self> {
-        let handle = Buffer::from(read(path)?);
+    fn new(handle: Buffer) -> Self {
+        // let handle = Buffer::from(read(path)?);
         let mut state = SipHasher::new();
         handle.hash(&mut state);
-        Ok(Self(state.finish128().as_u128()))
+        Self(state.finish128().as_u128())
     }
 }
 
@@ -262,7 +266,6 @@ impl FontSearcher {
     }
 
     async fn search_system(&mut self) -> Result<(), JsValue> {
-        self.add_embedded();
         if let Some(window) = web_sys::window() {
             for fontdata in JsFuture::from(window.query_local_fonts()?)
                 .await?

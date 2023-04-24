@@ -1,5 +1,6 @@
-import { App, FileSystemAdapter, HexString, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, FileSystemAdapter, HexString, Notice, Plugin, PluginSettingTab, Setting, TFile, TFolder, arrayBufferToBase64 } from 'obsidian';
 
+import { Base64 } from "js-base64"
 
 // @ts-ignore
 import typst_wasm_bin from './pkg/obsidian_typst_bg.wasm'
@@ -24,20 +25,35 @@ const DEFAULT_SETTINGS: TypstPluginSettings = {
 export default class TypstPlugin extends Plugin {
     settings: TypstPluginSettings;
     compiler: typst.SystemWorld;
+    files: Map<string, string>;
 
     async onload() {
         await typstInit(typst_wasm_bin)
         await this.loadSettings()
+        this.files = new Map()
         let notice = new Notice("Loading fonts for Typst...");
-        this.compiler = await new typst.SystemWorld((this.app.vault.adapter as FileSystemAdapter).getBasePath(), this.settings.search_system);
+        this.compiler = await new typst.SystemWorld("", (path: string) => this.get_file(path), this.settings.search_system);
         notice.hide();
         notice = new Notice("Finished loading fonts for Typst", 5000);
 
         this.addSettingTab(new TypstSettingTab(this.app, this));
         this.registerMarkdownCodeBlockProcessor("typst", async (source, el, ctx) => {
+            this.files.clear()
+            for (const file of this.app.vault.getFiles()) {
+                if (file.extension == "typ") {
+                    this.files.set(file.path, await this.app.vault.cachedRead(file))
+                }
+            }
+
             try {
                 const image = this.compiler.compile(source, this.settings.pixel_per_pt, `${this.settings.fill}${this.settings.noFill ? "00" : "ff"}`);
-                const bitmap = await createImageBitmap(image, { resizeWidth: 700, resizeHeight: image.height * (700 / image.width), resizeQuality: "high" })
+                // el.createEl("img", {
+                //     attr: {
+                //         src: "data:image/png;base64," + Base64.fromUint8Array(image.data.)
+                //     }
+                // })
+                const width = el.clientWidth
+                const bitmap = await createImageBitmap(image, { resizeWidth: width, resizeHeight: image.height * (width / image.width), resizeQuality: "high" })
                 let canvas = el.createEl("canvas", {
                     cls: "obsidian-typst",
                     attr: {
@@ -92,6 +108,14 @@ export default class TypstPlugin extends Plugin {
 
     async saveSettings() {
         await this.saveData(this.settings);
+    }
+
+    get_file(path: string) {
+        if (this.files.has(path)) {
+            return this.files.get(path)
+        }
+        console.error(`'${path}' is a folder or does not exist`);
+        throw `'${path}' is a folder or does not exist`
     }
 }
 
