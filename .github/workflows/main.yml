@@ -22,7 +22,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
-      - run: cargo install wasm-bindgen-cli --git https://github.com/fenjalien/wasm-bindgen.git
+      - run: cargo install wasm-bindgen-cli --git https://github.com/fenjalien/wasm-bindgen.git --rev 584383028e0fdb4bad927b4f886714ddfad2cd95
       - name: Setup Node
         uses: actions/setup-node@v3.6.0
         with:
