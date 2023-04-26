@@ -1,4 +1,4 @@
-import { App, HexString, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, HexString, Notice, Plugin, PluginSettingTab, Setting, Workspace, loadMathJax } from 'obsidian';
 
 // @ts-ignore
 import typst_wasm_bin from './pkg/obsidian_typst_bg.wasm'
@@ -11,93 +11,145 @@ interface TypstPluginSettings {
     fill: HexString,
     pixel_per_pt: number,
     search_system: boolean,
+    override_math: boolean,
+    preamable: {
+        shared: string,
+        math: string,
+        code: string,
+    }
 }
 
 const DEFAULT_SETTINGS: TypstPluginSettings = {
-    noFill: false,
+    noFill: true,
     fill: "#ffffff",
-    pixel_per_pt: 1,
+    pixel_per_pt: 3,
     search_system: false,
+    override_math: false,
+    preamable: {
+        shared: "#let pxToPt = (p) => if p == auto {p} else {p * DPR * (72/96) * 1pt}\n#set text(fill: white, size: pxToPt(SIZE))",
+        math: "#set page(width: pxToPt(WIDTH), height: pxToPt(HEIGHT), margin: 0pt)\n#set align(horizon)\n#import \"physics.typ\": *",
+        code: "#set page(width: auto, height: auto, margin: 1em)"
+    }
 }
 
 export default class TypstPlugin extends Plugin {
     settings: TypstPluginSettings;
     compiler: typst.SystemWorld;
     files: Map<string, string>;
+    tex2chtml: any;
+    resizeObserver: ResizeObserver;
 
     async onload() {
         await typstInit(typst_wasm_bin)
         await this.loadSettings()
-        this.files = new Map()
         let notice = new Notice("Loading fonts for Typst...");
         this.compiler = await new typst.SystemWorld("", (path: string) => this.get_file(path), this.settings.search_system);
         notice.hide();
         notice = new Notice("Finished loading fonts for Typst", 5000);
 
-        this.addSettingTab(new TypstSettingTab(this.app, this));
-        this.registerMarkdownCodeBlockProcessor("typst", async (source, el, ctx) => {
-            this.files.clear()
-            for (const file of this.app.vault.getFiles()) {
-                if (file.extension == "typ") {
-                    this.files.set(file.path, await this.app.vault.cachedRead(file))
-                }
-            }
+        this.registerEvent(
+            this.app.metadataCache.on("resolved", () => this.updateFileCache())
+        )
 
-            try {
-                const image = this.compiler.compile(source, this.settings.pixel_per_pt, `${this.settings.fill}${this.settings.noFill ? "00" : "ff"}`);
-                // el.createEl("img", {
-                //     attr: {
-                //         src: "data:image/png;base64," + Base64.fromUint8Array(image.data.)
-                //     }
-                // })
-                const width = el.clientWidth
-                const bitmap = await createImageBitmap(image, { resizeWidth: width, resizeHeight: image.height * (width / image.width), resizeQuality: "high" })
-                let canvas = el.createEl("canvas", {
-                    cls: "obsidian-typst",
-                    attr: {
-                        width: bitmap.width,
-                        height: bitmap.height,
-                    }
-                });
-                let ctx = canvas.getContext("2d");
-                ctx?.drawImage(bitmap, 0, 0);
-            } catch (error) {
-                console.error(error);
-            }
+        await loadMathJax()
+        // @ts-expect-error
+        this.tex2chtml = MathJax.tex2chtml
+        this.overrideMathJax(this.settings.override_math)
+
+        this.addCommand({
+            id: "typst-math-override",
+            name: "Toggle Math Block Override",
+            callback: () => this.overrideMathJax(!this.settings.override_math)
+        })
+        this.addCommand({
+            id: "typst-update-files",
+            name: "Update Cached .typ Files",
+            callback: () => this.updateFileCache()
         })
 
-        /// Renders typst using the cli
-        // this.registerMarkdownCodeBlockProcessor("typst", (source, el, ctx) => {
-        //     temp.mkdir("obsidian-typst", (err, folder) => {
-        //         if (err) {
-        //             el.innerHTML = err;
-        //             console.log(err);
-        //         } else {
-        //             fs.writeFileSync(path.join(folder, "main.typ"), source)
-        //             exec(
-        //                 `typst main.typ --image ${this.settings.noFill ? "--no-fill" : "--fill=" + this.settings.fill} --pixel-per-pt=${this.settings.pixel_per_pt}`,
-        //                 { cwd: folder }, (err, stdout, stderr) => {
-        //                     if (err || stdout || stderr) {
-        //                         // console.log(err, stdout, stderr);
-        //                         el.innerHTML = [String(err), stdout, stderr.replace(/\u001b[^m]*?m/g, "")].join("\n")
-        //                     } else {
-        //                         el.createEl("img", {
-        //                             cls: "obsidian-typst",
-        //                             attr: {
-        //                                 src: `data:image/png;base64,${fs.readFileSync(path.join(folder, "main-1.png")).toString("base64")}`
-        //                             }
-        //                         })
-        //                     }
-        //                 })
-        //         }
-        //         // temp.cleanup()
-        //     })
-        // });
+        this.addSettingTab(new TypstSettingTab(this.app, this));
+        this.registerMarkdownCodeBlockProcessor("typst", (source, el, ctx) => {
+            el.appendChild(this.compileTypst(`${this.settings.preamable.code}\n${source}`, true))
+        })
+
         console.log("loaded Typst");
     }
 
-    onunload() {
+    typst2Image(source: string) {
+        return this.compiler.compile(source, this.settings.pixel_per_pt, `${this.settings.fill}${this.settings.noFill ? "00" : "ff"}`)
+    }
 
+    typst2Canvas(source: string) {
+        const image = this.typst2Image(source)
+        let canvas = createEl("canvas", {
+            attr: {
+                width: image.width,
+                height: image.height
+            },
+            cls: "typst"
+        })
+
+        let ctx = canvas.getContext("2d");
+
+        ctx!.imageSmoothingEnabled = true
+        ctx!.imageSmoothingQuality = "high"
+        ctx?.putImageData(image, 0, 0);
+        return canvas
+    }
+
+    compileTypst(source: string, display: boolean) {
+        const fontSize = parseFloat(document.body.getCssPropertyValue("--font-text-size"))
+        let size = null;
+        let line_height;
+        try {
+            if (display) {
+                size = parseFloat(document.body.getCssPropertyValue("--file-line-width"))
+            } else {
+                line_height = parseFloat(document.body.getCssPropertyValue("--line-height-normal"))
+                size = line_height * fontSize
+            }
+
+            let canvas = this.typst2Canvas(`#let (WIDTH, HEIGHT, SIZE, DPR) = (${display ? size : "auto"}, ${!display ? size : "auto"}, ${fontSize}, ${window.devicePixelRatio})\n${this.settings.preamable.shared}\n${source}`)
+
+            if (display) {
+                canvas.style.width = `100%`;
+            } else {
+                console.log(size, fontSize, line_height);
+
+                canvas.style.verticalAlign = "bottom"
+                canvas.style.height = `${size}px`
+            }
+
+            return canvas
+        } catch (error) {
+            console.error(error);
+            let span = createSpan()
+            span.innerText = error
+            return span
+        }
+    }
+
+    typstMath2Html(source: string, r: { display: boolean }) {
+        const display = r.display;
+        source = `${this.settings.preamable.math}\n${display ? `$ ${source} $` : `$${source}$`}`
+        return this.compileTypst(source, display)
+    }
+
+    onunload() {
+        //@ts-expect-error
+        MathJax.tex2chtml = this.tex2chtml
+    }
+
+    async overrideMathJax(value: boolean) {
+        this.settings.override_math = value
+        await this.saveSettings();
+        if (this.settings.override_math) {
+            // @ts-expect-error
+            MathJax.tex2chtml = (e, r) => this.typstMath2Html(e, r)
+        } else {
+            // @ts-expect-error
+            MathJax.tex2chtml = this.tex2chtml
+        }
     }
 
     async loadSettings() {
@@ -112,8 +164,17 @@ export default class TypstPlugin extends Plugin {
         if (this.files.has(path)) {
             return this.files.get(path)
         }
-        console.error(`'${path}' is a folder or does not exist`);
+        console.error(`'${path}' is a folder or does not exist`, this.files.keys());
         throw `'${path}' is a folder or does not exist`
+    }
+
+    async updateFileCache() {
+        this.files = new Map()
+        for (const file of this.app.vault.getFiles()) {
+            if (file.extension == "typ") {
+                this.files.set(file.path, await this.app.vault.cachedRead(file))
+            }
+        }
     }
 }
 
@@ -177,5 +238,22 @@ class TypstSettingTab extends PluginSettingTab {
                         await this.plugin.saveSettings();
                     })
             })
+
+        new Setting(containerEl)
+            .setName("Override Math Blocks")
+            .addToggle((toggle) => {
+                toggle.setValue(this.plugin.settings.override_math)
+                    .onChange((value) => this.plugin.overrideMathJax(value))
+            });
+
+        new Setting(containerEl)
+            .setName("Shared Preamable")
+            .addTextArea((c) => c.setValue(this.plugin.settings.preamable.shared).onChange(async (value) => { this.plugin.settings.preamable.shared = value; await this.plugin.saveSettings() }))
+        new Setting(containerEl)
+            .setName("Code Block Preamable")
+            .addTextArea((c) => c.setValue(this.plugin.settings.preamable.code).onChange(async (value) => { this.plugin.settings.preamable.code = value; await this.plugin.saveSettings() }))
+        new Setting(containerEl)
+            .setName("Math Block Preamable")
+            .addTextArea((c) => c.setValue(this.plugin.settings.preamable.math).onChange(async (value) => { this.plugin.settings.preamable.math = value; await this.plugin.saveSettings() }))
     }
 }

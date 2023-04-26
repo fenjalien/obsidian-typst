@@ -11,8 +11,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # Everything to do with Typst
-typst = { git = "https://github.com/typst/typst.git", version = "0.2" }
-typst-library = { git = "https://github.com/typst/typst.git", version = "0.2" }
+typst = { git = "https://github.com/typst/typst.git", version = "0.3" }
+typst-library = { git = "https://github.com/typst/typst.git", version = "0.3" }
 comemo = "0.2"
 
 once_cell = "1.17.1"
