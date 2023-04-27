@@ -3,6 +3,7 @@ import { App, HexString, Notice, Plugin, PluginSettingTab, Setting, Workspace, l
 // @ts-ignore
 import typst_wasm_bin from './pkg/obsidian_typst_bg.wasm'
 import typstInit, * as typst from './pkg/obsidian_typst'
+import TypstCanvasElement from 'typst-canvas-element';
 
 // temp.track()
 
@@ -27,7 +28,7 @@ const DEFAULT_SETTINGS: TypstPluginSettings = {
     override_math: false,
     preamable: {
         shared: "#let pxToPt = (p) => if p == auto {p} else {p * DPR * (72/96) * 1pt}\n#set text(fill: white, size: pxToPt(SIZE))",
-        math: "#set page(width: pxToPt(WIDTH), height: pxToPt(HEIGHT), margin: 0pt)\n#set align(horizon)\n#import \"physics.typ\": *",
+        math: "#set page(width: pxToPt(WIDTH), height: pxToPt(HEIGHT), margin: 0pt)\n#set align(horizon)",
         code: "#set page(width: auto, height: auto, margin: 1em)"
     }
 }
@@ -51,88 +52,55 @@ export default class TypstPlugin extends Plugin {
             this.app.metadataCache.on("resolved", () => this.updateFileCache())
         )
 
+        TypstCanvasElement.compile = (a, b, c, d) => this.typstToSizedImage(a, b, c, d)
+        customElements.define("typst-canvas", TypstCanvasElement, { extends: "canvas" })
+
         await loadMathJax()
         // @ts-expect-error
         this.tex2chtml = MathJax.tex2chtml
         this.overrideMathJax(this.settings.override_math)
 
         this.addCommand({
-            id: "typst-math-override",
+            id: "math-override",
             name: "Toggle Math Block Override",
             callback: () => this.overrideMathJax(!this.settings.override_math)
         })
         this.addCommand({
-            id: "typst-update-files",
+            id: "update-files",
             name: "Update Cached .typ Files",
             callback: () => this.updateFileCache()
         })
 
         this.addSettingTab(new TypstSettingTab(this.app, this));
         this.registerMarkdownCodeBlockProcessor("typst", (source, el, ctx) => {
-            el.appendChild(this.compileTypst(`${this.settings.preamable.code}\n${source}`, true))
+            el.appendChild(this.typstToCanvas(`${this.settings.preamable.code}\n${source}`, true))
         })
 
         console.log("loaded Typst");
     }
 
-    typst2Image(source: string) {
+    typstToImage(source: string) {
         return this.compiler.compile(source, this.settings.pixel_per_pt, `${this.settings.fill}${this.settings.noFill ? "00" : "ff"}`)
     }
 
-    typst2Canvas(source: string) {
-        const image = this.typst2Image(source)
-        let canvas = createEl("canvas", {
-            attr: {
-                width: image.width,
-                height: image.height
-            },
-            cls: "typst"
-        })
-
-        let ctx = canvas.getContext("2d");
-
-        ctx!.imageSmoothingEnabled = true
-        ctx!.imageSmoothingQuality = "high"
-        ctx?.putImageData(image, 0, 0);
-        return canvas
+    typstToSizedImage(source: string, size: number, display: boolean, fontSize: number) {
+        const sizing = `#let (WIDTH, HEIGHT, SIZE, DPR) = (${display ? size : "auto"}, ${!display ? size : "auto"}, ${fontSize}, ${window.devicePixelRatio})`
+        return this.typstToImage(
+            `${sizing}\n${this.settings.preamable.shared}\n${source}`
+        )
     }
 
-    compileTypst(source: string, display: boolean) {
-        const fontSize = parseFloat(document.body.getCssPropertyValue("--font-text-size"))
-        let size = null;
-        let line_height;
-        try {
-            if (display) {
-                size = parseFloat(document.body.getCssPropertyValue("--file-line-width"))
-            } else {
-                line_height = parseFloat(document.body.getCssPropertyValue("--line-height-normal"))
-                size = line_height * fontSize
-            }
-
-            let canvas = this.typst2Canvas(`#let (WIDTH, HEIGHT, SIZE, DPR) = (${display ? size : "auto"}, ${!display ? size : "auto"}, ${fontSize}, ${window.devicePixelRatio})\n${this.settings.preamable.shared}\n${source}`)
-
-            if (display) {
-                canvas.style.width = `100%`;
-            } else {
-                console.log(size, fontSize, line_height);
-
-                canvas.style.verticalAlign = "bottom"
-                canvas.style.height = `${size}px`
-            }
-
-            return canvas
-        } catch (error) {
-            console.error(error);
-            let span = createSpan()
-            span.innerText = error
-            return span
-        }
+    typstToCanvas(source: string, display: boolean) {
+        let canvas = new TypstCanvasElement();
+        canvas.source = source
+        canvas.display = display
+        return canvas
     }
 
     typstMath2Html(source: string, r: { display: boolean }) {
         const display = r.display;
         source = `${this.settings.preamable.math}\n${display ? `$ ${source} $` : `$${source}$`}`
-        return this.compileTypst(source, display)
+        return this.typstToCanvas(source, display)
     }
 
     onunload() {
