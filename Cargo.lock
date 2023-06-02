@@ -579,7 +579,7 @@ checksum = "e25be21376a772d15f97ae789845340a9651d3c4246ff5ebb6a2b35f9c37bd31"
 
 [[package]]
 name = "obsidian-typst"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "comemo",
  "elsa",
