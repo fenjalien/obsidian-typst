@@ -161,11 +161,11 @@ impl SystemWorld {
         let hash = match hashes.get(path).cloned() {
             Some(hash) => hash,
             None => {
-                let hash = PathHash::new(Buffer::from(self.read_file(&path)?));
+                let hash = PathHash::new(Buffer::from(self.read_file(path)?));
                 if let Ok(canon) = path.canonicalize() {
-                    hashes.insert(canon.normalize(), hash.clone());
+                    hashes.insert(canon.normalize(), hash);
                 }
-                hashes.insert(path.into(), hash.clone());
+                hashes.insert(path.into(), hash);
                 hash
             }
         };
