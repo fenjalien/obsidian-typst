@@ -1,4 +1,4 @@
-# Obsidian Typst
+# Typst Renderer
 
 Renders `typst` code blocks, and optionally math blocks, into images using [Typst](https://github.com/typst/typst) through the power of WASM! This is still very much in development, so suggestions and bugs are welcome!
 
