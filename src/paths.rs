@@ -1,6 +1,6 @@
-use std::{cell::OnceCell, path::PathBuf, hash::Hash};
+use std::{cell::OnceCell, hash::Hash, path::PathBuf};
 
-use siphasher::sip128::{SipHasher13, Hasher128};
+use siphasher::sip128::{Hasher128, SipHasher13};
 use typst::{diag::FileResult, file::FileId, syntax::Source, util::Bytes};
 
 /// Holds canonical data for all pahts pointing to the same entity.
@@ -23,7 +23,7 @@ impl PathSlot {
             .get_or_init(|| {
                 Ok(Source::new(
                     self.id,
-                    String::from_utf8(self.buffer?.to_vec())?,
+                    String::from_utf8(self.buffer.clone()?.to_vec())?,
                 ))
             })
             .clone()

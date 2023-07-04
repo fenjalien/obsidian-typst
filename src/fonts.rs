@@ -1,4 +1,7 @@
-use typst::{font::{Font, FontBook}, util::Bytes};
+use typst::{
+    font::{Font, FontBook},
+    util::Bytes,
+};
 
 /// Searches for fonts.
 pub struct FontSearcher {
@@ -19,7 +22,7 @@ impl FontSearcher {
     pub fn add_embedded(&mut self) {
         let mut process = |bytes: &'static [u8]| {
             let buffer = Bytes::from_static(bytes);
-            for (i, font) in Font::iter(buffer).enumerate() {
+            for font in Font::iter(buffer) {
                 self.book.push(font.info().clone());
                 self.fonts.push(font);
             }

@@ -27,9 +27,9 @@ const DEFAULT_SETTINGS: TypstPluginSettings = {
     search_system: false,
     override_math: false,
     preamable: {
-        shared: "#let pxToPt = (p) => if p == auto {p} else {p * DPR * (72/96) * 1pt}\n#set text(fill: white, size: pxToPt(SIZE))",
-        math: "#set page(width: pxToPt(WIDTH), height: pxToPt(HEIGHT), margin: 0pt)\n#set align(horizon)",
-        code: "#set page(width: auto, height: auto, margin: 1em)"
+        shared: "#set text(fill: white, size: SIZE)\n#set page(width: WIDTH, height: HEIGHT)",
+        math: "#set page(margin: 0pt)\n#set align(horizon)",
+        code: "#set page(margin: (y: 1em, x: 0pt))"
     }
 }
 
@@ -44,7 +44,7 @@ export default class TypstPlugin extends Plugin {
         await typstInit(typst_wasm_bin)
         await this.loadSettings()
         let notice = new Notice("Loading fonts for Typst...");
-        this.compiler = await new typst.SystemWorld("", (path: string) => this.get_file(path), this.settings.search_system);
+        this.compiler = new typst.SystemWorld("", (path: string) => this.get_file(path))//, this.settings.search_system);
         notice.hide();
         notice = new Notice("Finished loading fonts for Typst", 5000);
 
@@ -52,13 +52,13 @@ export default class TypstPlugin extends Plugin {
             this.app.metadataCache.on("resolved", () => this.updateFileCache())
         )
 
-        TypstCanvasElement.compile = (a, b, c, d) => this.typstToSizedImage(a, b, c, d)
+        TypstCanvasElement.compile = (a, b, c, d, e) => this.typstToSizedImage(a, b, c, d, e)
         customElements.define("typst-canvas", TypstCanvasElement, { extends: "canvas" })
 
-        await loadMathJax()
-        // @ts-expect-error
-        this.tex2chtml = MathJax.tex2chtml
-        this.overrideMathJax(this.settings.override_math)
+        // await loadMathJax()
+        // // @ts-expect-error
+        // this.tex2chtml = MathJax.tex2chtml
+        // this.overrideMathJax(this.settings.override_math)
 
         this.addCommand({
             id: "math-override",
@@ -73,26 +73,33 @@ export default class TypstPlugin extends Plugin {
 
         this.addSettingTab(new TypstSettingTab(this.app, this));
         this.registerMarkdownCodeBlockProcessor("typst", (source, el, ctx) => {
-            el.appendChild(this.typstToCanvas(`${this.settings.preamable.code}\n${source}`, true))
+            el.appendChild(this.typstToCanvas("/" + ctx.sourcePath, `${this.settings.preamable.code}\n${source}`, true))
         })
 
         console.log("loaded Typst");
     }
 
-    typstToImage(source: string) {
-        return this.compiler.compile(source, this.settings.pixel_per_pt, `${this.settings.fill}${this.settings.noFill ? "00" : "ff"}`)
+    typstToImage(path: string, source: string) {
+        console.log(source);
+
+        return this.compiler.compile(source, path, this.settings.pixel_per_pt, `${this.settings.fill}${this.settings.noFill ? "00" : "ff"}`)
+        // return this.compiler.compile(source, path);
     }
 
-    typstToSizedImage(source: string, size: number, display: boolean, fontSize: number) {
-        const sizing = `#let (WIDTH, HEIGHT, SIZE, DPR) = (${display ? size : "auto"}, ${!display ? size : "auto"}, ${fontSize}, ${window.devicePixelRatio})`
+    typstToSizedImage(path: string, source: string, size: number, display: boolean, fontSize: number) {
+        const dpr = window.devicePixelRatio;
+        const pxToPt = (px: number) => (px * dpr * (72 / 96)).toString() + "pt"
+        const sizing = `#let (WIDTH, HEIGHT, SIZE) = (${display ? pxToPt(size) : "auto"}, ${!display ? pxToPt(size) : "auto"}, ${pxToPt(fontSize)})`
         return this.typstToImage(
+            path,
             `${sizing}\n${this.settings.preamable.shared}\n${source}`
         )
     }
 
-    typstToCanvas(source: string, display: boolean) {
+    typstToCanvas(path: string, source: string, display: boolean) {
         let canvas = new TypstCanvasElement();
         canvas.source = source
+        canvas.path = path
         canvas.display = display
         return canvas
     }
@@ -100,7 +107,7 @@ export default class TypstPlugin extends Plugin {
     typstMath2Html(source: string, r: { display: boolean }) {
         const display = r.display;
         source = `${this.settings.preamable.math}\n${display ? `$ ${source} $` : `$${source}$`}`
-        return this.typstToCanvas(source, display)
+        // return this.typstToCanvas(source, display)
     }
 
     onunload() {

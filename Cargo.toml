@@ -5,6 +5,7 @@ authors = ["fenjalien"]
 edition = "2021"
 description = "Renders `typst` code blocks to images with Typst."
 readme = "README.md"
+rust-version = "1.70"
 
 [lib]
 crate-type = ["cdylib"]
@@ -15,7 +16,6 @@ typst = { git = "https://github.com/typst/typst.git", tag = "v0.6.0" }
 typst-library = { git = "https://github.com/typst/typst.git", tag = "v0.6.0" }
 comemo = "0.3"
 siphasher = "0.3.10"
-elsa = "1.8.0"
 
 
 # Everything to do with wasm
@@ -25,3 +25,4 @@ wasm-bindgen-futures = "^0.4"
 serde = { version = "^1.0", features = ["derive"] }
 serde-wasm-bindgen = "^0.5"
 web-sys = { version = "^0.3", features = ["console", "Window", "FontData", "Blob", "ImageData"] }
+console_error_panic_hook = "0.1.7"

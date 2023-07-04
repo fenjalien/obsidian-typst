@@ -3,17 +3,20 @@ use std::{
     cell::{OnceCell, RefCell, RefMut},
     collections::HashMap,
     path::{Path, PathBuf},
+    str::FromStr,
 };
 use typst::{
     diag::{FileError, FileResult},
     eval::{Datetime, Library},
     file::FileId,
     font::{Font, FontBook},
+    geom::{Color, RgbaColor},
     syntax::Source,
     util::{Bytes, PathExt},
     World,
 };
-use wasm_bindgen::prelude::*;
+use wasm_bindgen::{prelude::*, Clamped};
+use web_sys::ImageData;
 
 mod fonts;
 mod paths;
@@ -50,7 +53,8 @@ pub struct SystemWorld {
 #[wasm_bindgen]
 impl SystemWorld {
     #[wasm_bindgen(constructor)]
-    pub async fn new(root: String, js_read_file: &js_sys::Function) -> SystemWorld {
+    pub fn new(root: String, js_read_file: &js_sys::Function) -> SystemWorld {
+        console_error_panic_hook::set_once();
         let mut searcher = FontSearcher::new();
         searcher.add_embedded();
 
@@ -76,10 +80,28 @@ impl SystemWorld {
     pub fn compile(
         &mut self,
         source: String,
-        path: String
+        path: String,
+        pixel_per_pt: f32,
+        fill: String,
     ) -> Result<ImageData, JsValue> {
         self.reset();
         self.main = Source::new(FileId::new(None, &PathBuf::from(path)), source);
+
+        match typst::compile(self) {
+            Ok(document) => {
+                let render = typst::export::render(
+                    &document.pages[0],
+                    pixel_per_pt,
+                    Color::Rgba(RgbaColor::from_str(&fill)?),
+                );
+                ImageData::new_with_u8_clamped_array_and_sh(
+                    Clamped(render.data()),
+                    render.width(),
+                    render.height(),
+                )
+            }
+            Err(errors) => Err(format!("{:?}", *errors).into()),
+        }
     }
 
     // pub fn compile(
@@ -136,7 +158,7 @@ impl World for SystemWorld {
         Some(self.fonts[index].clone())
     }
 
-    fn today(&self, offset: Option<i64>) -> Option<Datetime> {
+    fn today(&self, _: Option<i64>) -> Option<Datetime> {
         None
     }
 }
@@ -149,7 +171,7 @@ impl SystemWorld {
     fn slot(&self, id: FileId) -> FileResult<RefMut<PathSlot>> {
         let mut system_path = PathBuf::new();
         // let mut buffer: FileResult<Bytes> = Ok(Bytes::from_static(&[]));
-        let mut buffer: Bytes = Bytes::from_static(&[]);
+        // let mut buffer: Bytes = Bytes::from(vec![1]);
         let hash = self
             .hashes
             .borrow_mut()
@@ -161,17 +183,17 @@ impl SystemWorld {
                 };
 
                 system_path = root.join_rooted(id.path()).ok_or(FileError::AccessDenied)?;
-                buffer = self.read(&system_path)?;
+                // buffer = self.read(&system_path)?;
 
-                Ok(PathHash::new(&buffer))
+                Ok(PathHash::new(&self.read(&system_path)?))
             })
             .clone()?;
 
         Ok(RefMut::map(self.paths.borrow_mut(), |paths| {
             paths.entry(hash).or_insert_with(|| PathSlot {
                 id,
+                buffer: self.read(&system_path),
                 system_path,
-                buffer: Ok(buffer),
                 source: OnceCell::new(),
             })
         }))
