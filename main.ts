@@ -1,11 +1,10 @@
-import { App, HexString, Notice, Plugin, PluginSettingTab, Setting, Workspace, loadMathJax } from 'obsidian';
+import { App, FileSystemAdapter, HexString, Notice, Plugin, PluginSettingTab, Setting, Workspace, loadMathJax, normalizePath } from 'obsidian';
+
 
 // @ts-ignore
-import typst_wasm_bin from './pkg/obsidian_typst_bg.wasm'
-import typstInit, * as typst from './pkg/obsidian_typst'
-import TypstCanvasElement from 'typst-canvas-element';
+import Worker from "./compiler.worker.ts"
 
-// temp.track()
+import TypstCanvasElement from 'typst-canvas-element';
 
 interface TypstPluginSettings {
     noFill: boolean,
@@ -35,68 +34,108 @@ const DEFAULT_SETTINGS: TypstPluginSettings = {
 
 export default class TypstPlugin extends Plugin {
     settings: TypstPluginSettings;
-    compiler: typst.SystemWorld;
-    files: Map<string, string>;
+
+    compilerWorker: Worker;
+    fileBuffer: Int32Array;
+
     tex2chtml: any;
-    resizeObserver: ResizeObserver;
 
     async onload() {
-        await typstInit(typst_wasm_bin)
+        this.fileBuffer = new Int32Array(new SharedArrayBuffer(4));
+        this.compilerWorker = new Worker();
+        this.compilerWorker.postMessage(this.fileBuffer);
         await this.loadSettings()
-        let notice = new Notice("Loading fonts for Typst...");
-        this.compiler = new typst.SystemWorld("", (path: string) => this.get_file(path))//, this.settings.search_system);
-        notice.hide();
-        notice = new Notice("Finished loading fonts for Typst", 5000);
 
-        this.registerEvent(
-            this.app.metadataCache.on("resolved", () => this.updateFileCache())
-        )
+        TypstCanvasElement.compile = (a, b, c, d, e) => this.processThenCompileTypst(a, b, c, d, e)
+        customElements.define("typst-renderer", TypstCanvasElement, { extends: "canvas" })
 
-        TypstCanvasElement.compile = (a, b, c, d, e) => this.typstToSizedImage(a, b, c, d, e)
-        customElements.define("typst-canvas", TypstCanvasElement, { extends: "canvas" })
-
-        // await loadMathJax()
-        // // @ts-expect-error
-        // this.tex2chtml = MathJax.tex2chtml
-        // this.overrideMathJax(this.settings.override_math)
+        await loadMathJax()
+        // @ts-expect-error
+        this.tex2chtml = MathJax.tex2chtml
+        this.overrideMathJax(this.settings.override_math)
 
         this.addCommand({
-            id: "math-override",
-            name: "Toggle Math Block Override",
+            id: "toggle-math-override",
+            name: "Toggle math block override",
             callback: () => this.overrideMathJax(!this.settings.override_math)
-        })
-        this.addCommand({
-            id: "update-files",
-            name: "Update Cached .typ Files",
-            callback: () => this.updateFileCache()
         })
 
         this.addSettingTab(new TypstSettingTab(this.app, this));
-        this.registerMarkdownCodeBlockProcessor("typst", (source, el, ctx) => {
-            el.appendChild(this.typstToCanvas("/" + ctx.sourcePath, `${this.settings.preamable.code}\n${source}`, true))
+        this.registerMarkdownCodeBlockProcessor("typst", async (source, el, ctx) => {
+            el.appendChild(await this.createTypstCanvas("/" + ctx.sourcePath, `${this.settings.preamable.code}\n${source}`, true))
         })
 
-        console.log("loaded Typst");
+        console.log("loaded Typst Renderer");
     }
 
-    typstToImage(path: string, source: string) {
-        console.log(source);
+    async compileToTypst(path: string, source: string): Promise<ImageData> {
+        return await navigator.locks.request("typst renderer compiler", async (lock) => {
+            this.compilerWorker.postMessage({
+                source,
+                path,
+                pixel_per_pt: this.settings.pixel_per_pt,
+                fill: `${this.settings.fill}${this.settings.noFill ? "00" : "ff"}`
+            });
+            while (true) {
+                let result: ImageData | string = await new Promise((resolve, reject) => {
+                    const listener = (ev: MessageEvent<ImageData>) => {
+                        remove();
+                        resolve(ev.data);
+                    }
+                    const errorListener = (error: ErrorEvent) => {
+                        remove();
+                        reject(error.message)
+                    }
+                    const remove = () => {
+                        this.compilerWorker.removeEventListener("message", listener);
+                        this.compilerWorker.removeEventListener("error", errorListener);
+                    }
+                    this.compilerWorker.addEventListener("message", listener);
+                    this.compilerWorker.addEventListener("error", errorListener);
+                })
+                console.log(result);
+                
 
-        return this.compiler.compile(source, path, this.settings.pixel_per_pt, `${this.settings.fill}${this.settings.noFill ? "00" : "ff"}`)
-        // return this.compiler.compile(source, path);
+                if (result instanceof ImageData) {
+                    return result
+                }
+
+                await this.sendFile(result)
+            }
+        })
     }
 
-    typstToSizedImage(path: string, source: string, size: number, display: boolean, fontSize: number) {
+    async sendFile(path: string) {
+        console.log("Sending a file", path);
+        
+        try {
+            let file = new Int32Array(await this.app.vault.adapter.readBinary(normalizePath(path)))
+            //@ts-expect-error
+            this.fileBuffer.buffer.grow(file.byteLength + 4)
+            this.fileBuffer.set(file, 1)
+            this.fileBuffer[0] = 0
+        } catch(error) {
+            console.error(error);
+            this.fileBuffer[0] = -1
+            throw error
+        } finally {
+            Atomics.notify(this.fileBuffer, 0)
+        }
+        
+
+    }
+
+    async processThenCompileTypst(path: string, source: string, size: number, display: boolean, fontSize: number) {
         const dpr = window.devicePixelRatio;
         const pxToPt = (px: number) => (px * dpr * (72 / 96)).toString() + "pt"
         const sizing = `#let (WIDTH, HEIGHT, SIZE) = (${display ? pxToPt(size) : "auto"}, ${!display ? pxToPt(size) : "auto"}, ${pxToPt(fontSize)})`
-        return this.typstToImage(
+        return this.compileToTypst(
             path,
             `${sizing}\n${this.settings.preamable.shared}\n${source}`
         )
     }
 
-    typstToCanvas(path: string, source: string, display: boolean) {
+    createTypstCanvas(path: string, source: string, display: boolean) {
         let canvas = new TypstCanvasElement();
         canvas.source = source
         canvas.path = path
@@ -104,15 +143,17 @@ export default class TypstPlugin extends Plugin {
         return canvas
     }
 
-    typstMath2Html(source: string, r: { display: boolean }) {
+    createTypstMath(source: string, r: { display: boolean }) {
         const display = r.display;
         source = `${this.settings.preamable.math}\n${display ? `$ ${source} $` : `$${source}$`}`
-        // return this.typstToCanvas(source, display)
+
+        return this.createTypstCanvas("/", source, display)
     }
 
     onunload() {
-        //@ts-expect-error
+        // @ts-expect-error
         MathJax.tex2chtml = this.tex2chtml
+        this.compilerWorker.terminate()
     }
 
     async overrideMathJax(value: boolean) {
@@ -120,7 +161,7 @@ export default class TypstPlugin extends Plugin {
         await this.saveSettings();
         if (this.settings.override_math) {
             // @ts-expect-error
-            MathJax.tex2chtml = (e, r) => this.typstMath2Html(e, r)
+            MathJax.tex2chtml = (e, r) => this.createTypstMath(e, r)
         } else {
             // @ts-expect-error
             MathJax.tex2chtml = this.tex2chtml
@@ -135,22 +176,6 @@ export default class TypstPlugin extends Plugin {
         await this.saveData(this.settings);
     }
 
-    get_file(path: string) {
-        if (this.files.has(path)) {
-            return this.files.get(path)
-        }
-        console.error(`'${path}' is a folder or does not exist`, this.files.keys());
-        throw `'${path}' is a folder or does not exist`
-    }
-
-    async updateFileCache() {
-        this.files = new Map()
-        for (const file of this.app.vault.getFiles()) {
-            if (file.extension == "typ") {
-                this.files.set(file.path, await this.app.vault.cachedRead(file))
-            }
-        }
-    }
 }
 
 class TypstSettingTab extends PluginSettingTab {
@@ -165,6 +190,7 @@ class TypstSettingTab extends PluginSettingTab {
         const { containerEl } = this;
 
         containerEl.empty();
+
 
         let fill_color = new Setting(containerEl)
             .setName("Fill Color")

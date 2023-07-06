@@ -15,16 +15,17 @@
 	"author": "fenjalien",
 	"license": "Apache-2.0",
 	"devDependencies": {
-		"@types/node": "^16.11.6",
-		"@typescript-eslint/eslint-plugin": "^5.29.0",
-		"@typescript-eslint/parser": "^5.29.0",
-		"builtin-modules": "^3.3.0",
-		"esbuild": "^0.17.3",
-		"typescript": "^4.7.4"
+		"@types/node": "^20",
+		"@typescript-eslint/eslint-plugin": "^5",
+		"@typescript-eslint/parser": "^5",
+		"builtin-modules": "^3",
+		"esbuild": "^0.18",
+		"esbuild-plugin-inline-worker": "^0.1.1",
+		"typescript": "^5.1"
 	},
 	"dependencies": {
 		"obsidian": "latest",
 		"obsidian-typst": "file:pkg",
-		"tslib": "^2.4.0"
+		"tslib": "^2"
 	}
 }

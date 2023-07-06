@@ -1,5 +1,5 @@
 export default class TypstCanvasElement extends HTMLCanvasElement {
-    static compile: (path: string, source: string, size: number, display: boolean, fontSize: number) => ImageData;
+    static compile: (path: string, source: string, size: number, display: boolean, fontSize: number) => Promise<ImageData>;
 
     source: string
     path: string
@@ -7,14 +7,17 @@ export default class TypstCanvasElement extends HTMLCanvasElement {
     resizeObserver: ResizeObserver
     size: number
 
-    connectedCallback() {
+    async connectedCallback() {
         if (!this.isConnected) {
-            console.log("called before connection");
+            console.warn("Typst Renderer: Canvas element has been called before connection");
             return;
         }
-        this.draw()
+        this.height = 0;
+        // this.width = 0;
+        this.style.height = "100%"
+        await this.draw()
         if (this.display) {
-            this.resizeObserver = new ResizeObserver((entries) => {
+            this.resizeObserver = new ResizeObserver(async (entries) => {
                 if (entries[0]?.contentBoxSize[0].inlineSize !== this.size) {
                     this.draw()
                 }
@@ -24,38 +27,42 @@ export default class TypstCanvasElement extends HTMLCanvasElement {
     }
 
     disconnectedCallback() {
-        if (this.display) {
+        if (this.display && this.resizeObserver != undefined) {
             this.resizeObserver.disconnect()
         }
     }
 
-    draw() {
+    async draw() {
 
         let fontSize = parseFloat(this.getCssPropertyValue("--font-text-size"))
         this.size = this.display ? this.parentElement!.parentElement!.innerWidth : parseFloat(this.getCssPropertyValue("--line-height-normal")) * fontSize
-        // console.log(size, this.parentElement);
 
-
-        if (this.display) {
-            this.style.width = "100%"
-        } else {
-            this.style.verticalAlign = "bottom"
-            this.style.height = `${this.size}px`
+        // resizeObserver can trigger before the element gets disconnected which can cause the size to be 0
+        // which causes a NaN
+        if (this.size == 0) {
+            return;
         }
 
+
+        
         let image: ImageData;
         let ctx = this.getContext("2d")!;
         try {
-            image = TypstCanvasElement.compile(this.path, this.source, this.size, this.display, fontSize)
+        image =
+            await TypstCanvasElement.compile(this.path, this.source, this.size, this.display, fontSize)
         } catch (error) {
             console.error(error);
             this.outerText = error
             return
         }
 
-        console.log(image);
-        
-
+        if (this.display) {
+            this.style.width = "100%"
+            this.style.height = ""
+        } else {
+            this.style.verticalAlign = "bottom"
+            this.style.height = `${this.size}px`
+        }
         this.width = image.width
         this.height = image.height
 

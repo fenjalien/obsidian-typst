@@ -1,4 +1,5 @@
 use comemo::Prehashed;
+use js_sys::{Int32Array, Uint8Array};
 use std::{
     cell::{OnceCell, RefCell, RefMut},
     collections::HashMap,
@@ -16,7 +17,7 @@ use typst::{
     World,
 };
 use wasm_bindgen::{prelude::*, Clamped};
-use web_sys::ImageData;
+use web_sys::{console, ImageData};
 
 mod fonts;
 mod paths;
@@ -165,7 +166,18 @@ impl World for SystemWorld {
 
 impl SystemWorld {
     fn read(&self, path: &Path) -> FileResult<Bytes> {
-        unimplemented!()
+        let f = |e: JsValue| {
+            console::error_1(&e);
+            FileError::Other
+        };
+        Ok(Bytes::from(
+            self.js_read_file
+                .call1(&JsValue::NULL, &path.to_str().unwrap().into())
+                .map_err(f)?
+                .dyn_into::<Uint8Array>()
+                .map_err(f)?
+                .to_vec(),
+        ))
     }
 
     fn slot(&self, id: FileId) -> FileResult<RefMut<PathSlot>> {
