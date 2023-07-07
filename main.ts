@@ -41,7 +41,8 @@ export default class TypstPlugin extends Plugin {
     tex2chtml: any;
 
     async onload() {
-        this.fileBuffer = new Int32Array(new SharedArrayBuffer(4));
+        //@ts-expect-error
+        this.fileBuffer = new Int32Array(new SharedArrayBuffer(4, { maxByteLength: 1e8 }));
         this.compilerWorker = new Worker();
         this.compilerWorker.postMessage(this.fileBuffer);
         await this.loadSettings()
@@ -62,7 +63,7 @@ export default class TypstPlugin extends Plugin {
 
         this.addSettingTab(new TypstSettingTab(this.app, this));
         this.registerMarkdownCodeBlockProcessor("typst", async (source, el, ctx) => {
-            el.appendChild(await this.createTypstCanvas("/" + ctx.sourcePath, `${this.settings.preamable.code}\n${source}`, true))
+            el.appendChild(this.createTypstCanvas("/" + ctx.sourcePath, `${this.settings.preamable.code}\n${source}`, true))
         })
 
         console.log("loaded Typst Renderer");
@@ -93,8 +94,6 @@ export default class TypstPlugin extends Plugin {
                     this.compilerWorker.addEventListener("message", listener);
                     this.compilerWorker.addEventListener("error", errorListener);
                 })
-                console.log(result);
-                
 
                 if (result instanceof ImageData) {
                     return result
@@ -106,10 +105,10 @@ export default class TypstPlugin extends Plugin {
     }
 
     async sendFile(path: string) {
-        console.log("Sending a file", path);
+        console.log("sending file ", path);
         
         try {
-            let file = new Int32Array(await this.app.vault.adapter.readBinary(normalizePath(path)))
+            let file = Int32Array.from(new Uint8Array(await this.app.vault.adapter.readBinary(normalizePath(path))))
             //@ts-expect-error
             this.fileBuffer.buffer.grow(file.byteLength + 4)
             this.fileBuffer.set(file, 1)
@@ -119,6 +118,8 @@ export default class TypstPlugin extends Plugin {
             this.fileBuffer[0] = -1
             throw error
         } finally {
+            console.log("main", this.fileBuffer[0]);
+            
             Atomics.notify(this.fileBuffer, 0)
         }
         

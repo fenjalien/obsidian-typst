@@ -11,10 +11,14 @@ let file: Int32Array;
 
 function readFile(path: string) {
     postMessage(path)
+    console.log("waiting for file ", path);
+    
     const res = Atomics.wait(file, 0, 0);
+    console.log("worker", file[0], res);
     if (res == "ok") {
         return Uint8Array.from(file.slice(1))
     }
+    
     throw "AAAAAAAAAAAAAAA"
 }
 

@@ -17,7 +17,7 @@ export default class TypstCanvasElement extends HTMLCanvasElement {
         this.style.height = "100%"
         await this.draw()
         if (this.display) {
-            this.resizeObserver = new ResizeObserver(async (entries) => {
+            this.resizeObserver = new ResizeObserver((entries) => {
                 if (entries[0]?.contentBoxSize[0].inlineSize !== this.size) {
                     this.draw()
                 }
