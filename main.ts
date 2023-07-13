@@ -1,4 +1,4 @@
-import { App, renderMath, HexString, Notice, Platform, Plugin, PluginSettingTab, Setting, Workspace, loadMathJax, normalizePath } from 'obsidian';
+import { App, renderMath, HexString, Notice, Platform, Plugin, PluginSettingTab, Setting, Workspace, loadMathJax, normalizePath, TextComponent } from 'obsidian';
 
 import * as fs from "fs";
 
@@ -262,6 +262,19 @@ class TypstSettingTab extends PluginSettingTab {
         containerEl.empty();
 
 
+        new Setting(containerEl)
+            .setName("No Fill (Transparent)")
+            .addToggle((toggle) => {
+                toggle.setValue(this.plugin.settings.noFill)
+                    .onChange(
+                        async (value) => {
+                            this.plugin.settings.noFill = value;
+                            await this.plugin.saveSettings();
+                            fill_color.setDisabled(value)
+                        }
+                    )
+        });
+        
         let fill_color = new Setting(containerEl)
             .setName("Fill Color")
             .setDisabled(this.plugin.settings.noFill)
@@ -274,29 +287,21 @@ class TypstSettingTab extends PluginSettingTab {
                         }
                     )
             })
-        new Setting(containerEl)
-            .setName("No Fill (Transparent)")
-            .addToggle((toggle) => {
-                toggle.setValue(this.plugin.settings.noFill)
-                    .onChange(
-                        async (value) => {
-                            this.plugin.settings.noFill = value;
-                            await this.plugin.saveSettings();
-                            fill_color.setDisabled(value)
-                        }
-                    )
-            });
+
         new Setting(containerEl)
             .setName("Pixel Per Point")
             .addSlider((slider) =>
                 slider.setValue(this.plugin.settings.pixel_per_pt)
-                    .setLimits(1, 5, 1)
-                    .onChange(
-                        async (value) => {
-                            this.plugin.settings.pixel_per_pt = value;
-                            await this.plugin.saveSettings();
-                        }
-                    ))
+                .setLimits(1, 5, 1)
+                .onChange(
+                    async (value) => {
+                        this.plugin.settings.pixel_per_pt = value;
+                        await this.plugin.saveSettings();
+                    }
+                )
+                .setDynamicTooltip()
+            )
+
         new Setting(containerEl)
             .setName("Search System Fonts")
             .setDesc(`Whether the plugin should search for system fonts.
