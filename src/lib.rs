@@ -18,7 +18,7 @@ use typst::{
     World,
 };
 use wasm_bindgen::{prelude::*, Clamped};
-use web_sys::{console, ImageData};
+use web_sys::ImageData;
 
 mod fonts;
 mod paths;

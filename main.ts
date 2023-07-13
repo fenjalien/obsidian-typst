@@ -1,6 +1,4 @@
-import { App, renderMath, HexString, Notice, Platform, Plugin, PluginSettingTab, Setting, Workspace, loadMathJax, normalizePath, TextComponent } from 'obsidian';
-
-import * as fs from "fs";
+import { App, renderMath, HexString, Platform, Plugin, PluginSettingTab, Setting, loadMathJax, normalizePath } from 'obsidian';
 
 // @ts-ignore
 import Worker from "./compiler.worker.ts"
@@ -43,11 +41,13 @@ export default class TypstPlugin extends Plugin {
 
     prevCanvasHeight: number = 0;
     textEncoder: TextEncoder
+    fs: any;
 
     async onload() {
         this.compilerWorker = new Worker();
         if (!Platform.isMobileApp) {
             this.compilerWorker.postMessage(true);
+            this.fs = require("fs")
         }
 
         this.textEncoder = new TextEncoder()
@@ -149,7 +149,7 @@ export default class TypstPlugin extends Plugin {
     }
 
     async getFileBuffer(path: string): Promise<string> {
-        return await fs.promises.readFile(path, { encoding: "utf8" })
+        return await this.fs.promises.readFile(path, { encoding: "utf8" })
     }
 
     async preparePackage(spec: string): Promise<string | undefined> {
@@ -157,13 +157,13 @@ export default class TypstPlugin extends Plugin {
         let subdir = "/typst/packages/" + spec
 
         let dir = normalizePath(this.getDataDir() + subdir)
-        if (fs.existsSync(dir)) {
+        if (this.fs.existsSync(dir)) {
             return dir
         }
 
         dir = normalizePath(this.getCacheDir() + subdir)
 
-        if (fs.existsSync(dir)) {
+        if (this.fs.existsSync(dir)) {
             return dir
         }
     }
@@ -278,8 +278,8 @@ class TypstSettingTab extends PluginSettingTab {
                             fill_color.setDisabled(value)
                         }
                     )
-        });
-        
+            });
+
         let fill_color = new Setting(containerEl)
             .setName("Fill Color")
             .setDisabled(this.plugin.settings.noFill)
@@ -297,14 +297,14 @@ class TypstSettingTab extends PluginSettingTab {
             .setName("Pixel Per Point")
             .addSlider((slider) =>
                 slider.setValue(this.plugin.settings.pixel_per_pt)
-                .setLimits(1, 5, 1)
-                .onChange(
-                    async (value) => {
-                        this.plugin.settings.pixel_per_pt = value;
-                        await this.plugin.saveSettings();
-                    }
-                )
-                .setDynamicTooltip()
+                    .setLimits(1, 5, 1)
+                    .onChange(
+                        async (value) => {
+                            this.plugin.settings.pixel_per_pt = value;
+                            await this.plugin.saveSettings();
+                        }
+                    )
+                    .setDynamicTooltip()
             )
 
         new Setting(containerEl)
