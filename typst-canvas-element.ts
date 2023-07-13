@@ -25,7 +25,7 @@ export default class TypstCanvasElement extends HTMLCanvasElement {
 
         this.id = "TypstCanvasElement-" + TypstCanvasElement.nextId.toString()
         TypstCanvasElement.nextId += 1
-        // this.abortController = new AbortController()
+        this.abortController = new AbortController()
 
         await this.draw()
         this.prevHeight = this.innerHeight
@@ -49,8 +49,13 @@ export default class TypstCanvasElement extends HTMLCanvasElement {
     }
 
     async draw() {
-        
-        // await navigator.locks.request(this.id, () => {})
+        this.abortController.abort("shove it")
+        this.abortController = new AbortController()
+        try {
+            await navigator.locks.request(this.id, { signal: this.abortController.signal }, () => { })
+        } catch (error) {
+            return
+        }
 
         let fontSize = parseFloat(this.getCssPropertyValue("--font-text-size"))
         this.size = this.display ? this.parentElement!.parentElement!.innerWidth : parseFloat(this.getCssPropertyValue("--line-height-normal")) * fontSize
@@ -62,12 +67,12 @@ export default class TypstCanvasElement extends HTMLCanvasElement {
         }
 
 
-        
+
         let image: ImageData;
         let ctx = this.getContext("2d")!;
         try {
-        image =
-            await TypstCanvasElement.compile(this.path, this.source, this.size, this.display, fontSize)
+            image =
+                await TypstCanvasElement.compile(this.path, this.source, this.size, this.display, fontSize)
         } catch (error) {
             console.error(error);
             this.outerText = error
