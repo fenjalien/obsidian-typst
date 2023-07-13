@@ -25,7 +25,7 @@ function requestData(path: string): string {
         return decoder.decode(Uint8Array.from(buffer.slice(1)))
     }
 
-    throw "AAAAAAAAAAAAAAA"
+    throw buffer[0]
 }
 
 const compiler = new typst.SystemWorld("", requestData)
@@ -36,7 +36,8 @@ onmessage = (ev: MessageEvent<CompileCommand | true>) => {
         canUseSharedArrayBuffer = ev.data
     } else if ("source" in ev.data) {
         const data: CompileCommand = ev.data;
-        postMessage(compiler.compile(data.source, data.path, data.pixel_per_pt, data.fill))
+
+        postMessage(compiler.compile(data.source, data.path, data.pixel_per_pt, data.fill, data.size, data.display))
     } else {
         throw ev;
     }

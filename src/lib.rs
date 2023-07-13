@@ -1,7 +1,9 @@
 use comemo::Prehashed;
+use fast_image_resize as fr;
 use std::{
     cell::{OnceCell, RefCell, RefMut},
     collections::HashMap,
+    num::NonZeroU32,
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -49,6 +51,8 @@ pub struct SystemWorld {
 
     packages: RefCell<HashMap<PackageSpec, PackageResult<PathBuf>>>,
 
+    resizer: fr::Resizer,
+
     js_request_data: js_sys::Function,
 }
 
@@ -70,6 +74,7 @@ impl SystemWorld {
             paths: RefCell::default(),
             today: OnceCell::new(),
             packages: RefCell::default(),
+            resizer: fr::Resizer::default(),
             js_request_data: js_read_file.clone(),
         }
     }
@@ -86,21 +91,66 @@ impl SystemWorld {
         path: String,
         pixel_per_pt: f32,
         fill: String,
+        size: u32,
+        display: bool,
     ) -> Result<ImageData, JsValue> {
         self.reset();
         self.main = Source::new(FileId::new(None, &PathBuf::from(path)), source);
 
         match typst::compile(self) {
             Ok(document) => {
-                let render = typst::export::render(
+                let mut pixmap = typst::export::render(
                     &document.pages[0],
                     pixel_per_pt,
                     Color::Rgba(RgbaColor::from_str(&fill)?),
                 );
+
+                let width = pixmap.width();
+                let height = pixmap.height();
+                // Create src image
+                let mut src_image = fr::Image::from_slice_u8(
+                    NonZeroU32::new(width).unwrap(),
+                    NonZeroU32::new(height).unwrap(),
+                    pixmap.data_mut(),
+                    fr::PixelType::U8x4,
+                )
+                .unwrap();
+
+                // Multiple RGB channels of source image by alpha channel
+                let alpha_mul_div = fr::MulDiv::default();
+                alpha_mul_div
+                    .multiply_alpha_inplace(&mut src_image.view_mut())
+                    .unwrap();
+
+                let dst_width = NonZeroU32::new(if display {
+                    size
+                } else {
+                    ((size as f32 / height as f32) * width as f32) as u32
+                })
+                .unwrap();
+                let dst_height = NonZeroU32::new(if display {
+                    ((size as f32 / width as f32) * height as f32) as u32
+                } else {
+                    size
+                })
+                .unwrap();
+
+                // Create container for data of destination image
+                let mut dst_image = fr::Image::new(dst_width, dst_height, src_image.pixel_type());
+                // Get mutable view of destination image data
+                let mut dst_view = dst_image.view_mut();
+
+                // Resize source image into buffer of destination image
+                self.resizer
+                    .resize(&src_image.view(), &mut dst_view)
+                    .unwrap();
+
+                alpha_mul_div.divide_alpha_inplace(&mut dst_view).unwrap();
+
                 ImageData::new_with_u8_clamped_array_and_sh(
-                    Clamped(render.data()),
-                    render.width(),
-                    render.height(),
+                    Clamped(dst_image.buffer()),
+                    dst_width.get(),
+                    dst_height.get(),
                 )
             }
             Err(errors) => Err(format!("{:?}", *errors).into()),
@@ -140,10 +190,7 @@ impl World for SystemWorld {
 
 impl SystemWorld {
     fn read_file(&self, path: &Path) -> FileResult<String> {
-        let f = |e: JsValue| {
-            console::error_1(&e);
-            FileError::Other
-        };
+        let f = |_e: JsValue| FileError::Other;
         Ok(self
             .js_request_data
             .call1(&JsValue::NULL, &path.to_str().unwrap().into())
@@ -154,7 +201,11 @@ impl SystemWorld {
 
     fn prepare_package(&self, spec: &PackageSpec) -> PackageResult<PathBuf> {
         let f = |e: JsValue| {
-            console::error_1(&e);
+            if let Some(num) = e.as_f64() {
+                if num == -2.0 {
+                    return PackageError::NotFound(spec.clone());
+                }
+            }
             PackageError::Other
         };
         self.packages
@@ -189,7 +240,6 @@ impl SystemWorld {
                 };
 
                 system_path = root.join_rooted(id.path()).ok_or(FileError::AccessDenied)?;
-                // buffer = self.read(&system_path)?;
                 text = self.read_file(&system_path)?;
 
                 Ok(PathHash::new(&text))

@@ -54,7 +54,6 @@ export default class TypstPlugin extends Plugin {
         await this.loadSettings()
 
         TypstCanvasElement.compile = (a, b, c, d, e) => this.processThenCompileTypst(a, b, c, d, e)
-        TypstCanvasElement.reportHeight = (height: number) => this.prevCanvasHeight = height;
         if (customElements.get("typst-renderer") == undefined) {
             customElements.define("typst-renderer", TypstCanvasElement, { extends: "canvas" })
         }
@@ -81,13 +80,15 @@ export default class TypstPlugin extends Plugin {
         console.log("loaded Typst Renderer");
     }
 
-    async compileToTypst(path: string, source: string): Promise<ImageData> {
+    async compileToTypst(path: string, source: string, size: number, display: boolean): Promise<ImageData> {
         return await navigator.locks.request("typst renderer compiler", async (lock) => {
             this.compilerWorker.postMessage({
                 source,
                 path,
                 pixel_per_pt: this.settings.pixel_per_pt,
-                fill: `${this.settings.fill}${this.settings.noFill ? "00" : "ff"}`
+                fill: `${this.settings.fill}${this.settings.noFill ? "00" : "ff"}`,
+                size,
+                display
             });
             while (true) {
                 let result: ImageData | WorkerRequest = await new Promise((resolve, reject) => {
@@ -119,19 +120,26 @@ export default class TypstPlugin extends Plugin {
 
     async handleWorkerRequest({ buffer: wbuffer, path }: WorkerRequest) {
         try {
-            let buffer = Int32Array.from(this.textEncoder.encode(
-                await (
-                    path.startsWith("@")
-                        ? this.preparePackage(path)
-                        : this.getFileBuffer(path)
-                )
-            ))
-            if (wbuffer.byteLength < (buffer.byteLength + 4)) {
-                //@ts-expect-error
-                wbuffer.buffer.grow(buffer.byteLength + 4)
+            let s = await (
+                path.startsWith("@")
+                    ? this.preparePackage(path)
+                    : this.getFileBuffer(path)
+            );
+            if (s) {
+
+
+                let buffer = Int32Array.from(this.textEncoder.encode(
+                    s
+                ));
+                if (wbuffer.byteLength < (buffer.byteLength + 4)) {
+                    //@ts-expect-error
+                    wbuffer.buffer.grow(buffer.byteLength + 4)
+                }
+                wbuffer.set(buffer, 1)
+                wbuffer[0] = 0
+            } else {
+                wbuffer[0] = -2
             }
-            wbuffer.set(buffer, 1)
-            wbuffer[0] = 0
         } catch (error) {
             wbuffer[0] = -1
             throw error
@@ -144,7 +152,7 @@ export default class TypstPlugin extends Plugin {
         return await fs.promises.readFile(path, { encoding: "utf8" })
     }
 
-    async preparePackage(spec: string): Promise<string> {
+    async preparePackage(spec: string): Promise<string | undefined> {
         spec = spec.slice(1)
         let subdir = "/typst/packages/" + spec
 
@@ -152,16 +160,12 @@ export default class TypstPlugin extends Plugin {
         if (fs.existsSync(dir)) {
             return dir
         }
-        console.warn(dir);
 
         dir = normalizePath(this.getCacheDir() + subdir)
 
         if (fs.existsSync(dir)) {
             return dir
         }
-        console.warn(dir);
-
-        throw "Package not found"
     }
 
     getDataDir() {
@@ -200,7 +204,9 @@ export default class TypstPlugin extends Plugin {
         const sizing = `#let (WIDTH, HEIGHT, SIZE) = (${display ? pxToPt(size) : "auto"}, ${!display ? pxToPt(size) : "auto"}, ${pxToPt(fontSize)})`
         return this.compileToTypst(
             path,
-            `${sizing}\n${this.settings.preamable.shared}\n${source}`
+            `${sizing}\n${this.settings.preamable.shared}\n${source}`,
+            size,
+            display
         )
     }
 
@@ -210,7 +216,6 @@ export default class TypstPlugin extends Plugin {
         canvas.path = path
         canvas.display = display
         canvas.math = math
-        canvas.prevHeight = this.prevCanvasHeight
         return canvas
     }
 

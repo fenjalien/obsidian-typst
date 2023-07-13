@@ -1,7 +1,7 @@
 export default class TypstCanvasElement extends HTMLCanvasElement {
     static compile: (path: string, source: string, size: number, display: boolean, fontSize: number) => Promise<ImageData>;
-    static reportHeight: (height: number) => void;
     static nextId = 0;
+    static prevHeight = 0;
 
     id: string
     abortController: AbortController
@@ -11,7 +11,6 @@ export default class TypstCanvasElement extends HTMLCanvasElement {
     resizeObserver: ResizeObserver
     size: number
     math: boolean
-    prevHeight: number
 
     async connectedCallback() {
         if (!this.isConnected) {
@@ -19,16 +18,14 @@ export default class TypstCanvasElement extends HTMLCanvasElement {
             return;
         }
 
-        if (this.display && this.math) {
-            this.height = this.prevHeight;
-        }
+        // if (this.display && this.math) {
+        this.height = TypstCanvasElement.prevHeight;
+        // }
 
         this.id = "TypstCanvasElement-" + TypstCanvasElement.nextId.toString()
         TypstCanvasElement.nextId += 1
         this.abortController = new AbortController()
 
-        await this.draw()
-        this.prevHeight = this.innerHeight
         if (this.display) {
             this.resizeObserver = new ResizeObserver((entries) => {
                 if (entries[0]?.contentBoxSize[0].inlineSize !== this.size) {
@@ -37,19 +34,18 @@ export default class TypstCanvasElement extends HTMLCanvasElement {
             })
             this.resizeObserver.observe(this.parentElement!.parentElement!)
         }
+        await this.draw()
     }
 
     disconnectedCallback() {
-        if (this.display && this.math) {
-            TypstCanvasElement.reportHeight(this.prevHeight)
-        }
+        TypstCanvasElement.prevHeight = this.height
         if (this.display && this.resizeObserver != undefined) {
             this.resizeObserver.disconnect()
         }
     }
 
     async draw() {
-        this.abortController.abort("shove it")
+        this.abortController.abort()
         this.abortController = new AbortController()
         try {
             await navigator.locks.request(this.id, { signal: this.abortController.signal }, () => { })
@@ -65,8 +61,6 @@ export default class TypstCanvasElement extends HTMLCanvasElement {
         if (this.size == 0) {
             return;
         }
-
-
 
         let image: ImageData;
         let ctx = this.getContext("2d")!;
