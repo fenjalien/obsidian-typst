@@ -1,5 +1,4 @@
 use comemo::Prehashed;
-use js_sys::{Int32Array, Uint8Array};
 use std::{
     cell::{OnceCell, RefCell, RefMut},
     collections::HashMap,
@@ -7,9 +6,9 @@ use std::{
     str::FromStr,
 };
 use typst::{
-    diag::{FileError, FileResult},
+    diag::{FileError, FileResult, PackageError, PackageResult},
     eval::{Datetime, Library},
-    file::FileId,
+    file::{FileId, PackageSpec},
     font::{Font, FontBook},
     geom::{Color, RgbaColor},
     syntax::Source,
@@ -48,7 +47,9 @@ pub struct SystemWorld {
     /// always the same within one compilation. Reset between compilations.
     today: OnceCell<Option<Datetime>>,
 
-    js_read_file: js_sys::Function,
+    packages: RefCell<HashMap<PackageSpec, PackageResult<PathBuf>>>,
+
+    js_request_data: js_sys::Function,
 }
 
 #[wasm_bindgen]
@@ -68,7 +69,8 @@ impl SystemWorld {
             hashes: RefCell::default(),
             paths: RefCell::default(),
             today: OnceCell::new(),
-            js_read_file: js_read_file.clone(),
+            packages: RefCell::default(),
+            js_request_data: js_read_file.clone(),
         }
     }
 
@@ -104,34 +106,6 @@ impl SystemWorld {
             Err(errors) => Err(format!("{:?}", *errors).into()),
         }
     }
-
-    // pub fn compile(
-    //     &mut self,
-    //     source: String,
-    //     pixel_per_pt: f32,
-    //     fill: String,
-    // ) -> Result<ImageData, JsValue> {
-    //     self.sources.as_mut().clear();
-    //     self.hashes.borrow_mut().clear();
-    //     self.paths.borrow_mut().clear();
-
-    //     self.main = self.insert("<user input>".as_ref(), source);
-    //     match typst::compile(self) {
-    //         Ok(document) => {
-    //             let render = typst::export::render(
-    //                 &document.pages[0],
-    //                 pixel_per_pt,
-    //                 Color::Rgba(RgbaColor::from_str(&fill)?),
-    //             );
-    //             Ok(ImageData::new_with_u8_clamped_array_and_sh(
-    //                 Clamped(render.data()),
-    //                 render.width(),
-    //                 render.height(),
-    //             )?)
-    //         }
-    //         Err(errors) => Err(format!("{:?}", *errors).into()),
-    //     }
-    // }
 }
 
 impl World for SystemWorld {
@@ -165,48 +139,69 @@ impl World for SystemWorld {
 }
 
 impl SystemWorld {
-    fn read(&self, path: &Path) -> FileResult<Bytes> {
+    fn read_file(&self, path: &Path) -> FileResult<String> {
         let f = |e: JsValue| {
             console::error_1(&e);
             FileError::Other
         };
-        Ok(Bytes::from(
-            self.js_read_file
-                .call1(&JsValue::NULL, &path.to_str().unwrap().into())
-                .map_err(f)?
-                .dyn_into::<Uint8Array>()
-                .map_err(f)?
-                .to_vec(),
-        ))
+        Ok(self
+            .js_request_data
+            .call1(&JsValue::NULL, &path.to_str().unwrap().into())
+            .map_err(f)?
+            .as_string()
+            .unwrap())
+    }
+
+    fn prepare_package(&self, spec: &PackageSpec) -> PackageResult<PathBuf> {
+        let f = |e: JsValue| {
+            console::error_1(&e);
+            PackageError::Other
+        };
+        self.packages
+            .borrow_mut()
+            .entry(spec.clone())
+            .or_insert_with(|| {
+                Ok(self
+                    .js_request_data
+                    .call1(
+                        &JsValue::NULL,
+                        &format!("@{}/{}-{}", spec.namespace, spec.name, spec.version).into(),
+                    )
+                    .map_err(f)?
+                    .as_string()
+                    .unwrap()
+                    .into())
+            })
+            .clone()
     }
 
     fn slot(&self, id: FileId) -> FileResult<RefMut<PathSlot>> {
         let mut system_path = PathBuf::new();
-        // let mut buffer: FileResult<Bytes> = Ok(Bytes::from_static(&[]));
-        // let mut buffer: Bytes = Bytes::from(vec![1]);
+        let mut text = String::new();
         let hash = self
             .hashes
             .borrow_mut()
             .entry(id)
             .or_insert_with(|| {
                 let root = match id.package() {
-                    Some(spec) => panic!(),
+                    Some(spec) => self.prepare_package(spec)?,
                     None => self.root.clone(),
                 };
 
                 system_path = root.join_rooted(id.path()).ok_or(FileError::AccessDenied)?;
                 // buffer = self.read(&system_path)?;
+                text = self.read_file(&system_path)?;
 
-                Ok(PathHash::new(&self.read(&system_path)?))
+                Ok(PathHash::new(&text))
             })
             .clone()?;
 
         Ok(RefMut::map(self.paths.borrow_mut(), |paths| {
             paths.entry(hash).or_insert_with(|| PathSlot {
                 id,
-                buffer: self.read(&system_path),
+                source: Ok(Source::new(id, text)),
+                buffer: OnceCell::new(),
                 system_path,
-                source: OnceCell::new(),
             })
         }))
     }

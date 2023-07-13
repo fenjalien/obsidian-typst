@@ -2,32 +2,38 @@
 import wasmBin from './pkg/obsidian_typst_bg.wasm'
 import * as typst from './pkg'
 
-import CompileCommand from "types";
+import { CompileCommand, WorkerRequest } from "types";
 
 typst.initSync(wasmBin);
 
+let canUseSharedArrayBuffer = new Boolean(false);
 
-let file: Int32Array;
+// let buffer: Int32Array;
+let decoder = new TextDecoder()
 
-function readFile(path: string) {
-    postMessage(path)
-    console.log("waiting for file ", path);
-    
-    const res = Atomics.wait(file, 0, 0);
-    console.log("worker", file[0], res);
-    if (res == "ok") {
-        return Uint8Array.from(file.slice(1))
+function requestData(path: string): string {
+    if (!canUseSharedArrayBuffer) {
+        throw "Cannot read files on mobile"
     }
-    
+
+    // @ts-expect-error
+    let buffer = new Int32Array(new SharedArrayBuffer(4, { maxByteLength: 1e8 }))
+    buffer[0] = 0;
+    postMessage({ buffer, path })
+    const res = Atomics.wait(buffer, 0, 0);
+    if (buffer[0] == 0) {
+        return decoder.decode(Uint8Array.from(buffer.slice(1)))
+    }
+
     throw "AAAAAAAAAAAAAAA"
 }
 
-const compiler = new typst.SystemWorld("", readFile)
+const compiler = new typst.SystemWorld("", requestData)
 
 
-onmessage = (ev: MessageEvent<CompileCommand | Int32Array>) => {
-    if (ev.data instanceof Int32Array && file == undefined) {
-        file = ev.data;
+onmessage = (ev: MessageEvent<CompileCommand | true>) => {
+    if (ev.data == true) {
+        canUseSharedArrayBuffer = ev.data
     } else if ("source" in ev.data) {
         const data: CompileCommand = ev.data;
         postMessage(compiler.compile(data.source, data.path, data.pixel_per_pt, data.fill))

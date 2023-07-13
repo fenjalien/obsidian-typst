@@ -12,26 +12,35 @@ pub struct PathSlot {
     /// The slot's path on the system.
     pub system_path: PathBuf,
     /// The loaded buffer for a path hash.
-    pub buffer: FileResult<Bytes>,
+    pub buffer: OnceCell<FileResult<Bytes>>,
     /// The lazily loaded source file for a path hash.
-    pub source: OnceCell<FileResult<Source>>,
+    pub source: FileResult<Source>,
 }
 
 impl PathSlot {
     pub fn source(&self) -> FileResult<Source> {
-        self.source
-            .get_or_init(|| {
-                Ok(Source::new(
-                    self.id,
-                    String::from_utf8(self.buffer.clone()?.to_vec())?,
-                ))
-            })
-            .clone()
+        self.source.clone()
     }
 
     pub fn file(&self) -> FileResult<Bytes> {
-        self.buffer.clone()
+        self.buffer
+            .get_or_init(|| Ok(Bytes::from(self.source()?.text().as_bytes())))
+            .clone()
     }
+    // pub fn source(&self) -> FileResult<Source> {
+    //     self.source
+    //         .get_or_init(|| {
+    //             Ok(Source::new(
+    //                 self.id,
+    //                 String::from_utf8(self.buffer.clone()?.to_vec())?,
+    //             ))
+    //         })
+    //         .clone()
+    // }
+
+    // pub fn file(&self) -> FileResult<Bytes> {
+    //     self.buffer.clone()
+    // }
 }
 
 /// A hash that is the same for all paths pointing to the same entity.
@@ -39,9 +48,9 @@ impl PathSlot {
 pub struct PathHash(u128);
 
 impl PathHash {
-    pub fn new(bytes: &Bytes) -> Self {
+    pub fn new(source: &str) -> Self {
         let mut state = SipHasher13::new();
-        bytes.hash(&mut state);
+        source.hash(&mut state);
         Self(state.finish128().as_u128())
     }
 }

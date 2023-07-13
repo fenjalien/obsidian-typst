@@ -1,10 +1,12 @@
-import { App, FileSystemAdapter, HexString, Notice, Plugin, PluginSettingTab, Setting, Workspace, loadMathJax, normalizePath } from 'obsidian';
+import { App, renderMath, HexString, Notice, Platform, Plugin, PluginSettingTab, Setting, Workspace, loadMathJax, normalizePath } from 'obsidian';
 
+import * as fs from "fs";
 
 // @ts-ignore
 import Worker from "./compiler.worker.ts"
 
 import TypstCanvasElement from 'typst-canvas-element';
+import { WorkerRequest } from 'types.js';
 
 interface TypstPluginSettings {
     noFill: boolean,
@@ -36,21 +38,29 @@ export default class TypstPlugin extends Plugin {
     settings: TypstPluginSettings;
 
     compilerWorker: Worker;
-    fileBuffer: Int32Array;
 
     tex2chtml: any;
 
+    prevCanvasHeight: number = 0;
+    textEncoder: TextEncoder
+
     async onload() {
-        //@ts-expect-error
-        this.fileBuffer = new Int32Array(new SharedArrayBuffer(4, { maxByteLength: 1e8 }));
         this.compilerWorker = new Worker();
-        this.compilerWorker.postMessage(this.fileBuffer);
+        if (!Platform.isMobileApp) {
+            this.compilerWorker.postMessage(true);
+        }
+
+        this.textEncoder = new TextEncoder()
         await this.loadSettings()
 
         TypstCanvasElement.compile = (a, b, c, d, e) => this.processThenCompileTypst(a, b, c, d, e)
-        customElements.define("typst-renderer", TypstCanvasElement, { extends: "canvas" })
+        TypstCanvasElement.reportHeight = (height: number) => this.prevCanvasHeight = height;
+        if (customElements.get("typst-renderer") == undefined) {
+            customElements.define("typst-renderer", TypstCanvasElement, { extends: "canvas" })
+        }
 
         await loadMathJax()
+        renderMath("", false);
         // @ts-expect-error
         this.tex2chtml = MathJax.tex2chtml
         this.overrideMathJax(this.settings.override_math)
@@ -61,10 +71,12 @@ export default class TypstPlugin extends Plugin {
             callback: () => this.overrideMathJax(!this.settings.override_math)
         })
 
+
         this.addSettingTab(new TypstSettingTab(this.app, this));
         this.registerMarkdownCodeBlockProcessor("typst", async (source, el, ctx) => {
-            el.appendChild(this.createTypstCanvas("/" + ctx.sourcePath, `${this.settings.preamable.code}\n${source}`, true))
+            el.appendChild(this.createTypstCanvas("/" + ctx.sourcePath, `${this.settings.preamable.code}\n${source}`, true, false))
         })
+
 
         console.log("loaded Typst Renderer");
     }
@@ -78,7 +90,7 @@ export default class TypstPlugin extends Plugin {
                 fill: `${this.settings.fill}${this.settings.noFill ? "00" : "ff"}`
             });
             while (true) {
-                let result: ImageData | string = await new Promise((resolve, reject) => {
+                let result: ImageData | WorkerRequest = await new Promise((resolve, reject) => {
                     const listener = (ev: MessageEvent<ImageData>) => {
                         remove();
                         resolve(ev.data);
@@ -98,32 +110,88 @@ export default class TypstPlugin extends Plugin {
                 if (result instanceof ImageData) {
                     return result
                 }
-
-                await this.sendFile(result)
+                // Cannot reach this point when in mobile app as the worker should
+                // not have a SharedArrayBuffer
+                await this.handleWorkerRequest(result)
             }
         })
     }
 
-    async sendFile(path: string) {
-        console.log("sending file ", path);
-        
+    async handleWorkerRequest({ buffer: wbuffer, path }: WorkerRequest) {
         try {
-            let file = Int32Array.from(new Uint8Array(await this.app.vault.adapter.readBinary(normalizePath(path))))
-            //@ts-expect-error
-            this.fileBuffer.buffer.grow(file.byteLength + 4)
-            this.fileBuffer.set(file, 1)
-            this.fileBuffer[0] = 0
-        } catch(error) {
-            console.error(error);
-            this.fileBuffer[0] = -1
+            let buffer = Int32Array.from(this.textEncoder.encode(
+                await (
+                    path.startsWith("@")
+                        ? this.preparePackage(path)
+                        : this.getFileBuffer(path)
+                )
+            ))
+            if (wbuffer.byteLength < (buffer.byteLength + 4)) {
+                //@ts-expect-error
+                wbuffer.buffer.grow(buffer.byteLength + 4)
+            }
+            wbuffer.set(buffer, 1)
+            wbuffer[0] = 0
+        } catch (error) {
+            wbuffer[0] = -1
             throw error
         } finally {
-            console.log("main", this.fileBuffer[0]);
-            
-            Atomics.notify(this.fileBuffer, 0)
+            Atomics.notify(wbuffer, 0)
         }
-        
+    }
 
+    async getFileBuffer(path: string): Promise<string> {
+        return await fs.promises.readFile(path, { encoding: "utf8" })
+    }
+
+    async preparePackage(spec: string): Promise<string> {
+        spec = spec.slice(1)
+        let subdir = "/typst/packages/" + spec
+
+        let dir = normalizePath(this.getDataDir() + subdir)
+        if (fs.existsSync(dir)) {
+            return dir
+        }
+        console.warn(dir);
+
+        dir = normalizePath(this.getCacheDir() + subdir)
+
+        if (fs.existsSync(dir)) {
+            return dir
+        }
+        console.warn(dir);
+
+        throw "Package not found"
+    }
+
+    getDataDir() {
+        if (Platform.isLinux) {
+            if ("XDG_DATA_HOME" in process.env) {
+                return process.env["XDG_DATA_HOME"]
+            } else {
+                return process.env["HOME"] + "/.local/share"
+            }
+        } else if (Platform.isWin) {
+            return process.env["APPDATA"]
+        } else if (Platform.isMacOS) {
+            return process.env["HOME"] + "/Library/Application Support"
+        }
+        throw "Cannot find data directory on an unknown platform"
+    }
+
+    getCacheDir() {
+        if (Platform.isLinux) {
+            if ("XDG_CACHE_HOME" in process.env) {
+                return process.env["XDG_DATA_HOME"]
+            } else {
+                return process.env["HOME"] + "/.cache"
+            }
+        } else if (Platform.isWin) {
+            return process.env["LOCALAPPDATA"]
+        } else if (Platform.isMacOS) {
+            return process.env["HOME"] + "/Library/Caches"
+        }
+        throw "Cannot find cache directory on an unknown platform"
     }
 
     async processThenCompileTypst(path: string, source: string, size: number, display: boolean, fontSize: number) {
@@ -136,11 +204,13 @@ export default class TypstPlugin extends Plugin {
         )
     }
 
-    createTypstCanvas(path: string, source: string, display: boolean) {
+    createTypstCanvas(path: string, source: string, display: boolean, math: boolean) {
         let canvas = new TypstCanvasElement();
         canvas.source = source
         canvas.path = path
         canvas.display = display
+        canvas.math = math
+        canvas.prevHeight = this.prevCanvasHeight
         return canvas
     }
 
@@ -148,7 +218,7 @@ export default class TypstPlugin extends Plugin {
         const display = r.display;
         source = `${this.settings.preamable.math}\n${display ? `$ ${source} $` : `$${source}$`}`
 
-        return this.createTypstCanvas("/", source, display)
+        return this.createTypstCanvas("/", source, display, true)
     }
 
     onunload() {
@@ -176,7 +246,6 @@ export default class TypstPlugin extends Plugin {
     async saveSettings() {
         await this.saveData(this.settings);
     }
-
 }
 
 class TypstSettingTab extends PluginSettingTab {

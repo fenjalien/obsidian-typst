@@ -1,21 +1,34 @@
 export default class TypstCanvasElement extends HTMLCanvasElement {
     static compile: (path: string, source: string, size: number, display: boolean, fontSize: number) => Promise<ImageData>;
+    static reportHeight: (height: number) => void;
+    static nextId = 0;
 
+    id: string
+    abortController: AbortController
     source: string
     path: string
     display: boolean
     resizeObserver: ResizeObserver
     size: number
+    math: boolean
+    prevHeight: number
 
     async connectedCallback() {
         if (!this.isConnected) {
             console.warn("Typst Renderer: Canvas element has been called before connection");
             return;
         }
-        this.height = 0;
-        // this.width = 0;
-        this.style.height = "100%"
+
+        if (this.display && this.math) {
+            this.height = this.prevHeight;
+        }
+
+        this.id = "TypstCanvasElement-" + TypstCanvasElement.nextId.toString()
+        TypstCanvasElement.nextId += 1
+        // this.abortController = new AbortController()
+
         await this.draw()
+        this.prevHeight = this.innerHeight
         if (this.display) {
             this.resizeObserver = new ResizeObserver((entries) => {
                 if (entries[0]?.contentBoxSize[0].inlineSize !== this.size) {
@@ -27,12 +40,17 @@ export default class TypstCanvasElement extends HTMLCanvasElement {
     }
 
     disconnectedCallback() {
+        if (this.display && this.math) {
+            TypstCanvasElement.reportHeight(this.prevHeight)
+        }
         if (this.display && this.resizeObserver != undefined) {
             this.resizeObserver.disconnect()
         }
     }
 
     async draw() {
+        
+        // await navigator.locks.request(this.id, () => {})
 
         let fontSize = parseFloat(this.getCssPropertyValue("--font-text-size"))
         this.size = this.display ? this.parentElement!.parentElement!.innerWidth : parseFloat(this.getCssPropertyValue("--line-height-normal")) * fontSize
