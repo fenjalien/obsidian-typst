@@ -1,1 +1,15 @@
 /* styles */
+textarea {
+    width: 100%;
+    resize: vertical;
+}
+
+.setting-item:has(textarea) {
+    flex-direction: column;
+    gap: 0.5em;
+    align-items: stretch;
+}
+
+.is-disabled {
+    display: none;
+}
