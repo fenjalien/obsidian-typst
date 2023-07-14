@@ -15,7 +15,6 @@ function requestData(path: string): string {
     if (!canUseSharedArrayBuffer) {
         throw "Cannot read files on mobile"
     }
-
     // @ts-expect-error
     let buffer = new Int32Array(new SharedArrayBuffer(4, { maxByteLength: 1e8 }))
     buffer[0] = 0;
@@ -36,7 +35,6 @@ onmessage = (ev: MessageEvent<CompileCommand | true>) => {
         canUseSharedArrayBuffer = ev.data
     } else if ("source" in ev.data) {
         const data: CompileCommand = ev.data;
-
         postMessage(compiler.compile(data.source, data.path, data.pixel_per_pt, data.fill, data.size, data.display))
     } else {
         throw ev;

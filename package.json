@@ -1,12 +1,13 @@
 {
 	"name": "obsidian-typst-plugin",
-	"version": "0.4.2",
+	"version": "0.5.0",
 	"description": "Renders `typst` code blocks to images with Typst.",
 	"main": "main.js",
 	"scripts": {
 		"wasm": "wasm-pack build --target web",
 		"dev": "node esbuild.config.mjs",
 		"wasm-dev": "wasm-pack build --target web --dev && node esbuild.config.mjs",
+		"wasm-dev-build": "wasm-pack build --target web --features console_error && tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"wasm-build": "wasm-pack build --target web && tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
 		"version": "node version-bump.mjs && git add manifest.json versions.json"

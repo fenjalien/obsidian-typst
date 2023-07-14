@@ -1,6 +1,6 @@
 [package]
 name = "obsidian-typst"
-version = "0.4.2"
+version = "0.5.0"
 authors = ["fenjalien"]
 edition = "2021"
 description = "Renders `typst` code blocks to images with Typst."
@@ -24,6 +24,17 @@ js-sys = "^0.3"
 wasm-bindgen-futures = "^0.4"
 serde = { version = "^1.0", features = ["derive"] }
 serde-wasm-bindgen = "^0.5"
-web-sys = { version = "^0.3", features = ["console", "Window", "FontData", "Blob", "ImageData"] }
-console_error_panic_hook = "0.1.7"
+web-sys = { version = "^0.3", features = [
+    "console",
+    "Window",
+    "FontData",
+    "Blob",
+    "ImageData",
+] }
+console_error_panic_hook = { version = "0.1.7", optional = true }
+
+# Image handling
 fast_image_resize = "2.7.3"
+
+[features]
+console_error = ["dep:console_error_panic_hook"]

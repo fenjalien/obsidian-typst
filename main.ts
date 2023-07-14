@@ -123,7 +123,7 @@ export default class TypstPlugin extends Plugin {
             let s = await (
                 path.startsWith("@")
                     ? this.preparePackage(path)
-                    : this.getFileBuffer(path)
+                    : this.getFileString(path)
             );
             if (s) {
 
@@ -148,8 +148,12 @@ export default class TypstPlugin extends Plugin {
         }
     }
 
-    async getFileBuffer(path: string): Promise<string> {
-        return await this.fs.promises.readFile(path, { encoding: "utf8" })
+    async getFileString(path: string): Promise<string> {
+        if (require("path").isAbsolute(path)) {
+            return await this.fs.promises.readFile(path, { encoding: "utf8" })
+        } else {
+            return await this.app.vault.adapter.read(normalizePath(path))
+        }
     }
 
     async preparePackage(spec: string): Promise<string | undefined> {
@@ -223,7 +227,7 @@ export default class TypstPlugin extends Plugin {
         const display = r.display;
         source = `${this.settings.preamable.math}\n${display ? `$ ${source} $` : `$${source}$`}`
 
-        return this.createTypstCanvas("/", source, display, true)
+        return this.createTypstCanvas("/586f8912-f3a8-4455-8a4a-3729469c2cc1.typ", source, display, true)
     }
 
     onunload() {

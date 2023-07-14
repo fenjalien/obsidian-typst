@@ -60,6 +60,7 @@ pub struct SystemWorld {
 impl SystemWorld {
     #[wasm_bindgen(constructor)]
     pub fn new(root: String, js_read_file: &js_sys::Function) -> SystemWorld {
+        #[cfg(feature = "console_error")]
         console_error_panic_hook::set_once();
         let mut searcher = FontSearcher::new();
         searcher.add_embedded();
