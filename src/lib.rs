@@ -8,7 +8,7 @@ use std::{
     str::FromStr,
 };
 use typst::{
-    diag::{FileError, FileResult, PackageError, PackageResult},
+    diag::{EcoString, FileError, FileResult, PackageError, PackageResult},
     eval::{Datetime, Library},
     file::{FileId, PackageSpec},
     font::{Font, FontBook},
@@ -18,7 +18,7 @@ use typst::{
     World,
 };
 use wasm_bindgen::{prelude::*, Clamped};
-use web_sys::ImageData;
+use web_sys::{console, ImageData};
 
 mod fonts;
 mod paths;
@@ -32,7 +32,7 @@ pub struct SystemWorld {
     /// The root relative to which absolute paths are resolved.
     root: PathBuf,
     /// The input source.
-    main: Source,
+    main: FileId,
     /// Typst's standard library.
     library: Prehashed<Library>,
     /// Metadata about discovered fonts.
@@ -66,7 +66,7 @@ impl SystemWorld {
 
         Self {
             root: PathBuf::from(root),
-            main: Source::detached(String::new()),
+            main: FileId::detached(),
             library: Prehashed::new(typst_library::build()),
             book: Prehashed::new(searcher.book),
             fonts: searcher.fonts,
@@ -87,7 +87,7 @@ impl SystemWorld {
 
     pub fn compile(
         &mut self,
-        source: String,
+        text: String,
         path: String,
         pixel_per_pt: f32,
         fill: String,
@@ -95,7 +95,21 @@ impl SystemWorld {
         display: bool,
     ) -> Result<ImageData, JsValue> {
         self.reset();
-        self.main = Source::new(FileId::new(None, &PathBuf::from(path)), source);
+
+        // Insert the main path slot
+        let system_path = PathBuf::from(path);
+        let hash = PathHash::new(&text);
+        self.main = FileId::new(None, &system_path);
+        self.hashes.borrow_mut().insert(self.main, Ok(hash));
+        self.paths.borrow_mut().insert(
+            hash,
+            PathSlot {
+                id: self.main,
+                system_path,
+                buffer: OnceCell::new(),
+                source: Ok(Source::new(self.main, text)),
+            },
+        );
 
         match typst::compile(self) {
             Ok(document) => {
@@ -153,7 +167,14 @@ impl SystemWorld {
                     dst_height.get(),
                 )
             }
-            Err(errors) => Err(format!("{:?}", *errors).into()),
+            Err(errors) => Err(format!(
+                "{:?}",
+                errors
+                    .into_iter()
+                    .map(|e| e.message)
+                    .collect::<Vec<EcoString>>()
+            )
+            .into()),
         }
     }
 }
@@ -168,7 +189,7 @@ impl World for SystemWorld {
     }
 
     fn main(&self) -> Source {
-        self.main.clone()
+        self.source(self.main).unwrap()
     }
 
     fn source(&self, id: FileId) -> FileResult<Source> {
