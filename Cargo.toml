@@ -31,10 +31,7 @@ web-sys = { version = "^0.3", features = [
     "Blob",
     "ImageData",
 ] }
-console_error_panic_hook = { version = "0.1.7", optional = true }
+console_error_panic_hook = "0.1.7"
 
 # Image handling
 fast_image_resize = "2.7.3"
-
-[features]
-console_error = ["dep:console_error_panic_hook"]
