@@ -80,6 +80,10 @@ export default class TypstPlugin extends Plugin {
         console.log("loaded Typst Renderer");
     }
 
+    // async loadCompilerWorker() {
+    //     this.compilerWorker.
+    // }
+
     async compileToTypst(path: string, source: string, size: number, display: boolean): Promise<ImageData> {
         return await navigator.locks.request("typst renderer compiler", async (lock) => {
             this.compilerWorker.postMessage({

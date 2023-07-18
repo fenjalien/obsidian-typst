@@ -18,7 +18,7 @@ use typst::{
     World,
 };
 use wasm_bindgen::{prelude::*, Clamped};
-use web_sys::{console, ImageData};
+use web_sys::ImageData;
 
 mod fonts;
 mod paths;
@@ -141,13 +141,13 @@ impl SystemWorld {
                 } else {
                     ((size as f32 / height as f32) * width as f32) as u32
                 })
-                .unwrap();
+                .unwrap_or(NonZeroU32::MIN);
                 let dst_height = NonZeroU32::new(if display {
                     ((size as f32 / width as f32) * height as f32) as u32
                 } else {
                     size
                 })
-                .unwrap();
+                .unwrap_or(NonZeroU32::MIN);
 
                 // Create container for data of destination image
                 let mut dst_image = fr::Image::new(dst_width, dst_height, src_image.pixel_type());
