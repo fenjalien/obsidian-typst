@@ -1,11 +1,10 @@
-import { App, HexString, Notice, Plugin, PluginSettingTab, Setting, Workspace, loadMathJax } from 'obsidian';
+import { App, renderMath, HexString, Platform, Plugin, PluginSettingTab, Setting, loadMathJax, normalizePath } from 'obsidian';
 
 // @ts-ignore
-import typst_wasm_bin from './pkg/obsidian_typst_bg.wasm'
-import typstInit, * as typst from './pkg/obsidian_typst'
-import TypstCanvasElement from 'typst-canvas-element';
+import Worker from "./compiler.worker.ts"
 
-// temp.track()
+import TypstCanvasElement from 'typst-canvas-element';
+import { WorkerRequest } from 'types.js';
 
 interface TypstPluginSettings {
     noFill: boolean,
@@ -27,85 +26,218 @@ const DEFAULT_SETTINGS: TypstPluginSettings = {
     search_system: false,
     override_math: false,
     preamable: {
-        shared: "#let pxToPt = (p) => if p == auto {p} else {p * DPR * (72/96) * 1pt}\n#set text(fill: white, size: pxToPt(SIZE))",
-        math: "#set page(width: pxToPt(WIDTH), height: pxToPt(HEIGHT), margin: 0pt)\n#set align(horizon)",
-        code: "#set page(width: auto, height: auto, margin: 1em)"
+        shared: "#set text(fill: white, size: SIZE)\n#set page(width: WIDTH, height: HEIGHT)",
+        math: "#set page(margin: 0pt)\n#set align(horizon)",
+        code: "#set page(margin: (y: 1em, x: 0pt))"
     }
 }
 
 export default class TypstPlugin extends Plugin {
     settings: TypstPluginSettings;
-    compiler: typst.SystemWorld;
-    files: Map<string, string>;
+
+    compilerWorker: Worker;
+
     tex2chtml: any;
-    resizeObserver: ResizeObserver;
+
+    prevCanvasHeight: number = 0;
+    textEncoder: TextEncoder
+    fs: any;
 
     async onload() {
-        await typstInit(typst_wasm_bin)
+        this.compilerWorker = new Worker();
+        if (!Platform.isMobileApp) {
+            this.compilerWorker.postMessage(true);
+            this.fs = require("fs")
+        }
+
+        this.textEncoder = new TextEncoder()
         await this.loadSettings()
-        let notice = new Notice("Loading fonts for Typst...");
-        this.compiler = await new typst.SystemWorld("", (path: string) => this.get_file(path), this.settings.search_system);
-        notice.hide();
-        notice = new Notice("Finished loading fonts for Typst", 5000);
 
-        this.registerEvent(
-            this.app.metadataCache.on("resolved", () => this.updateFileCache())
-        )
-
-        TypstCanvasElement.compile = (a, b, c, d) => this.typstToSizedImage(a, b, c, d)
-        customElements.define("typst-canvas", TypstCanvasElement, { extends: "canvas" })
+        TypstCanvasElement.compile = (a, b, c, d, e) => this.processThenCompileTypst(a, b, c, d, e)
+        if (customElements.get("typst-renderer") == undefined) {
+            customElements.define("typst-renderer", TypstCanvasElement, { extends: "canvas" })
+        }
 
         await loadMathJax()
+        renderMath("", false);
         // @ts-expect-error
         this.tex2chtml = MathJax.tex2chtml
         this.overrideMathJax(this.settings.override_math)
 
         this.addCommand({
-            id: "math-override",
-            name: "Toggle Math Block Override",
+            id: "toggle-math-override",
+            name: "Toggle math block override",
             callback: () => this.overrideMathJax(!this.settings.override_math)
         })
-        this.addCommand({
-            id: "update-files",
-            name: "Update Cached .typ Files",
-            callback: () => this.updateFileCache()
-        })
+
 
         this.addSettingTab(new TypstSettingTab(this.app, this));
-        this.registerMarkdownCodeBlockProcessor("typst", (source, el, ctx) => {
-            el.appendChild(this.typstToCanvas(`${this.settings.preamable.code}\n${source}`, true))
+        this.registerMarkdownCodeBlockProcessor("typst", async (source, el, ctx) => {
+            el.appendChild(this.createTypstCanvas("/" + ctx.sourcePath, `${this.settings.preamable.code}\n${source}`, true, false))
         })
 
-        console.log("loaded Typst");
+
+        console.log("loaded Typst Renderer");
     }
 
-    typstToImage(source: string) {
-        return this.compiler.compile(source, this.settings.pixel_per_pt, `${this.settings.fill}${this.settings.noFill ? "00" : "ff"}`)
+    // async loadCompilerWorker() {
+    //     this.compilerWorker.
+    // }
+
+    async compileToTypst(path: string, source: string, size: number, display: boolean): Promise<ImageData> {
+        return await navigator.locks.request("typst renderer compiler", async (lock) => {
+            this.compilerWorker.postMessage({
+                source,
+                path,
+                pixel_per_pt: this.settings.pixel_per_pt,
+                fill: `${this.settings.fill}${this.settings.noFill ? "00" : "ff"}`,
+                size,
+                display
+            });
+            while (true) {
+                let result: ImageData | WorkerRequest = await new Promise((resolve, reject) => {
+                    const listener = (ev: MessageEvent<ImageData>) => {
+                        remove();
+                        resolve(ev.data);
+                    }
+                    const errorListener = (error: ErrorEvent) => {
+                        remove();
+                        reject(error.message)
+                    }
+                    const remove = () => {
+                        this.compilerWorker.removeEventListener("message", listener);
+                        this.compilerWorker.removeEventListener("error", errorListener);
+                    }
+                    this.compilerWorker.addEventListener("message", listener);
+                    this.compilerWorker.addEventListener("error", errorListener);
+                })
+
+                if (result instanceof ImageData) {
+                    return result
+                }
+                // Cannot reach this point when in mobile app as the worker should
+                // not have a SharedArrayBuffer
+                await this.handleWorkerRequest(result)
+            }
+        })
     }
 
-    typstToSizedImage(source: string, size: number, display: boolean, fontSize: number) {
-        const sizing = `#let (WIDTH, HEIGHT, SIZE, DPR) = (${display ? size : "auto"}, ${!display ? size : "auto"}, ${fontSize}, ${window.devicePixelRatio})`
-        return this.typstToImage(
-            `${sizing}\n${this.settings.preamable.shared}\n${source}`
+    async handleWorkerRequest({ buffer: wbuffer, path }: WorkerRequest) {
+        try {
+            let s = await (
+                path.startsWith("@")
+                    ? this.preparePackage(path)
+                    : this.getFileString(path)
+            );
+            if (s) {
+
+
+                let buffer = Int32Array.from(this.textEncoder.encode(
+                    s
+                ));
+                if (wbuffer.byteLength < (buffer.byteLength + 4)) {
+                    //@ts-expect-error
+                    wbuffer.buffer.grow(buffer.byteLength + 4)
+                }
+                wbuffer.set(buffer, 1)
+                wbuffer[0] = 0
+            } else {
+                wbuffer[0] = -2
+            }
+        } catch (error) {
+            wbuffer[0] = -1
+            throw error
+        } finally {
+            Atomics.notify(wbuffer, 0)
+        }
+    }
+
+    async getFileString(path: string): Promise<string> {
+        if (require("path").isAbsolute(path)) {
+            return await this.fs.promises.readFile(path, { encoding: "utf8" })
+        } else {
+            return await this.app.vault.adapter.read(normalizePath(path))
+        }
+    }
+
+    async preparePackage(spec: string): Promise<string | undefined> {
+        spec = spec.slice(1)
+        let subdir = "/typst/packages/" + spec
+
+        let dir = normalizePath(this.getDataDir() + subdir)
+        if (this.fs.existsSync(dir)) {
+            return dir
+        }
+
+        dir = normalizePath(this.getCacheDir() + subdir)
+
+        if (this.fs.existsSync(dir)) {
+            return dir
+        }
+    }
+
+    getDataDir() {
+        if (Platform.isLinux) {
+            if ("XDG_DATA_HOME" in process.env) {
+                return process.env["XDG_DATA_HOME"]
+            } else {
+                return process.env["HOME"] + "/.local/share"
+            }
+        } else if (Platform.isWin) {
+            return process.env["APPDATA"]
+        } else if (Platform.isMacOS) {
+            return process.env["HOME"] + "/Library/Application Support"
+        }
+        throw "Cannot find data directory on an unknown platform"
+    }
+
+    getCacheDir() {
+        if (Platform.isLinux) {
+            if ("XDG_CACHE_HOME" in process.env) {
+                return process.env["XDG_DATA_HOME"]
+            } else {
+                return process.env["HOME"] + "/.cache"
+            }
+        } else if (Platform.isWin) {
+            return process.env["LOCALAPPDATA"]
+        } else if (Platform.isMacOS) {
+            return process.env["HOME"] + "/Library/Caches"
+        }
+        throw "Cannot find cache directory on an unknown platform"
+    }
+
+    async processThenCompileTypst(path: string, source: string, size: number, display: boolean, fontSize: number) {
+        const dpr = window.devicePixelRatio;
+        const pxToPt = (px: number) => (px * dpr * (72 / 96)).toString() + "pt"
+        const sizing = `#let (WIDTH, HEIGHT, SIZE) = (${display ? pxToPt(size) : "auto"}, ${!display ? pxToPt(size) : "auto"}, ${pxToPt(fontSize)})`
+        return this.compileToTypst(
+            path,
+            `${sizing}\n${this.settings.preamable.shared}\n${source}`,
+            size,
+            display
         )
     }
 
-    typstToCanvas(source: string, display: boolean) {
+    createTypstCanvas(path: string, source: string, display: boolean, math: boolean) {
         let canvas = new TypstCanvasElement();
         canvas.source = source
+        canvas.path = path
         canvas.display = display
+        canvas.math = math
         return canvas
     }
 
-    typstMath2Html(source: string, r: { display: boolean }) {
+    createTypstMath(source: string, r: { display: boolean }) {
         const display = r.display;
         source = `${this.settings.preamable.math}\n${display ? `$ ${source} $` : `$${source}$`}`
-        return this.typstToCanvas(source, display)
+
+        return this.createTypstCanvas("/586f8912-f3a8-4455-8a4a-3729469c2cc1.typ", source, display, true)
     }
 
     onunload() {
-        //@ts-expect-error
+        // @ts-expect-error
         MathJax.tex2chtml = this.tex2chtml
+        this.compilerWorker.terminate()
     }
 
     async overrideMathJax(value: boolean) {
@@ -113,7 +245,7 @@ export default class TypstPlugin extends Plugin {
         await this.saveSettings();
         if (this.settings.override_math) {
             // @ts-expect-error
-            MathJax.tex2chtml = (e, r) => this.typstMath2Html(e, r)
+            MathJax.tex2chtml = (e, r) => this.createTypstMath(e, r)
         } else {
             // @ts-expect-error
             MathJax.tex2chtml = this.tex2chtml
@@ -126,23 +258,6 @@ export default class TypstPlugin extends Plugin {
 
     async saveSettings() {
         await this.saveData(this.settings);
-    }
-
-    get_file(path: string) {
-        if (this.files.has(path)) {
-            return this.files.get(path)
-        }
-        console.error(`'${path}' is a folder or does not exist`, this.files.keys());
-        throw `'${path}' is a folder or does not exist`
-    }
-
-    async updateFileCache() {
-        this.files = new Map()
-        for (const file of this.app.vault.getFiles()) {
-            if (file.extension == "typ") {
-                this.files.set(file.path, await this.app.vault.cachedRead(file))
-            }
-        }
     }
 }
 
@@ -159,18 +274,7 @@ class TypstSettingTab extends PluginSettingTab {
 
         containerEl.empty();
 
-        let fill_color = new Setting(containerEl)
-            .setName("Fill Color")
-            .setDisabled(this.plugin.settings.noFill)
-            .addColorPicker((picker) => {
-                picker.setValue(this.plugin.settings.fill)
-                    .onChange(
-                        async (value) => {
-                            this.plugin.settings.fill = value;
-                            await this.plugin.saveSettings();
-                        }
-                    )
-            })
+
         new Setting(containerEl)
             .setName("No Fill (Transparent)")
             .addToggle((toggle) => {
@@ -183,6 +287,20 @@ class TypstSettingTab extends PluginSettingTab {
                         }
                     )
             });
+
+        let fill_color = new Setting(containerEl)
+            .setName("Fill Color")
+            .setDisabled(this.plugin.settings.noFill)
+            .addColorPicker((picker) => {
+                picker.setValue(this.plugin.settings.fill)
+                    .onChange(
+                        async (value) => {
+                            this.plugin.settings.fill = value;
+                            await this.plugin.saveSettings();
+                        }
+                    )
+            })
+
         new Setting(containerEl)
             .setName("Pixel Per Point")
             .addSlider((slider) =>
@@ -193,7 +311,10 @@ class TypstSettingTab extends PluginSettingTab {
                             this.plugin.settings.pixel_per_pt = value;
                             await this.plugin.saveSettings();
                         }
-                    ))
+                    )
+                    .setDynamicTooltip()
+            )
+
         new Setting(containerEl)
             .setName("Search System Fonts")
             .setDesc(`Whether the plugin should search for system fonts.

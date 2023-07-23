@@ -1,299 +1,279 @@
 use comemo::Prehashed;
-use elsa::FrozenVec;
-use once_cell::unsync::OnceCell;
-use siphasher::sip128::{Hasher128, SipHasher};
+use fast_image_resize as fr;
 use std::{
-    cell::{RefCell, RefMut},
+    cell::{OnceCell, RefCell, RefMut},
     collections::HashMap,
-    hash::Hash,
+    num::NonZeroU32,
     path::{Path, PathBuf},
     str::FromStr,
 };
 use typst::{
-    diag::{FileError, FileResult},
-    eval::Library,
-    font::{Font, FontBook, FontInfo},
+    diag::{EcoString, FileError, FileResult, PackageError, PackageResult},
+    eval::{Datetime, Library},
+    file::{FileId, PackageSpec},
+    font::{Font, FontBook},
     geom::{Color, RgbaColor},
-    syntax::{Source, SourceId},
-    util::{Buffer, PathExt},
+    syntax::Source,
+    util::{Bytes, PathExt},
     World,
 };
 use wasm_bindgen::{prelude::*, Clamped};
-use wasm_bindgen_futures::JsFuture;
-use web_sys::{console, Blob, FontData, ImageData};
+use web_sys::ImageData;
 
-#[wasm_bindgen]
-extern "C" {
-    fn alert(s: &str);
-}
+mod fonts;
+mod paths;
 
-#[wasm_bindgen(module = "fs")]
-extern "C" {
-    #[wasm_bindgen(catch)]
-    fn readFileSync(path: &str) -> Result<JsValue, JsValue>;
-}
+use crate::fonts::FontSearcher;
+use crate::paths::{PathHash, PathSlot};
 
 /// A world that provides access to the operating system.
 #[wasm_bindgen]
 pub struct SystemWorld {
+    /// The root relative to which absolute paths are resolved.
     root: PathBuf,
+    /// The input source.
+    main: FileId,
+    /// Typst's standard library.
     library: Prehashed<Library>,
+    /// Metadata about discovered fonts.
     book: Prehashed<FontBook>,
-    fonts: Vec<FontSlot>,
-    hashes: RefCell<HashMap<PathBuf, PathHash>>,
+    /// Storage of fonts
+    fonts: Vec<Font>,
+    /// Maps package-path combinations to canonical hashes. All package-path
+    /// combinations that point to thes same file are mapped to the same hash. To
+    /// be used in conjunction with `paths`.
+    hashes: RefCell<HashMap<FileId, FileResult<PathHash>>>,
+    /// Maps canonical path hashes to source files and buffers.
     paths: RefCell<HashMap<PathHash, PathSlot>>,
-    sources: FrozenVec<Box<Source>>,
-    main: SourceId,
-    js_read_file: js_sys::Function,
+    /// The current date if requested. This is stored here to ensure it is
+    /// always the same within one compilation. Reset between compilations.
+    today: OnceCell<Option<Datetime>>,
+
+    packages: RefCell<HashMap<PackageSpec, PackageResult<PathBuf>>>,
+
+    resizer: fr::Resizer,
+
+    js_request_data: js_sys::Function,
 }
 
 #[wasm_bindgen]
 impl SystemWorld {
     #[wasm_bindgen(constructor)]
-    pub async fn new(
-        root: String,
-        js_read_file: &js_sys::Function,
-        search_system: bool,
-    ) -> Result<SystemWorld, JsValue> {
+    pub fn new(root: String, js_read_file: &js_sys::Function) -> SystemWorld {
+        console_error_panic_hook::set_once();
         let mut searcher = FontSearcher::new();
-        if search_system {
-            searcher.search_system().await?;
-        } else {
-            searcher.add_embedded();
-        }
+        searcher.add_embedded();
 
-        Ok(Self {
+        Self {
             root: PathBuf::from(root),
+            main: FileId::detached(),
             library: Prehashed::new(typst_library::build()),
             book: Prehashed::new(searcher.book),
             fonts: searcher.fonts,
             hashes: RefCell::default(),
             paths: RefCell::default(),
-            sources: FrozenVec::new(),
-            main: SourceId::detached(),
-            js_read_file: js_read_file.clone(),
-        })
+            today: OnceCell::new(),
+            packages: RefCell::default(),
+            resizer: fr::Resizer::default(),
+            js_request_data: js_read_file.clone(),
+        }
+    }
+
+    fn reset(&mut self) {
+        self.hashes.borrow_mut().clear();
+        self.paths.borrow_mut().clear();
+        self.today.take();
     }
 
     pub fn compile(
         &mut self,
-        source: String,
+        text: String,
+        path: String,
         pixel_per_pt: f32,
         fill: String,
+        size: u32,
+        display: bool,
     ) -> Result<ImageData, JsValue> {
-        self.sources.as_mut().clear();
-        self.hashes.borrow_mut().clear();
-        self.paths.borrow_mut().clear();
+        self.reset();
 
-        self.main = self.insert("<user input>".as_ref(), source);
+        // Insert the main path slot
+        let system_path = PathBuf::from(path);
+        let hash = PathHash::new(&text);
+        self.main = FileId::new(None, &system_path);
+        self.hashes.borrow_mut().insert(self.main, Ok(hash));
+        self.paths.borrow_mut().insert(
+            hash,
+            PathSlot {
+                id: self.main,
+                system_path,
+                buffer: OnceCell::new(),
+                source: Ok(Source::new(self.main, text)),
+            },
+        );
+
         match typst::compile(self) {
             Ok(document) => {
-                let render = typst::export::render(
+                let mut pixmap = typst::export::render(
                     &document.pages[0],
                     pixel_per_pt,
                     Color::Rgba(RgbaColor::from_str(&fill)?),
                 );
-                Ok(ImageData::new_with_u8_clamped_array_and_sh(
-                    Clamped(render.data()),
-                    render.width(),
-                    render.height(),
-                )?)
+
+                let width = pixmap.width();
+                let height = pixmap.height();
+                // Create src image
+                let mut src_image = fr::Image::from_slice_u8(
+                    NonZeroU32::new(width).unwrap(),
+                    NonZeroU32::new(height).unwrap(),
+                    pixmap.data_mut(),
+                    fr::PixelType::U8x4,
+                )
+                .unwrap();
+
+                // Multiple RGB channels of source image by alpha channel
+                let alpha_mul_div = fr::MulDiv::default();
+                alpha_mul_div
+                    .multiply_alpha_inplace(&mut src_image.view_mut())
+                    .unwrap();
+
+                let dst_width = NonZeroU32::new(if display {
+                    size
+                } else {
+                    ((size as f32 / height as f32) * width as f32) as u32
+                })
+                .unwrap_or(NonZeroU32::MIN);
+                let dst_height = NonZeroU32::new(if display {
+                    ((size as f32 / width as f32) * height as f32) as u32
+                } else {
+                    size
+                })
+                .unwrap_or(NonZeroU32::MIN);
+
+                // Create container for data of destination image
+                let mut dst_image = fr::Image::new(dst_width, dst_height, src_image.pixel_type());
+                // Get mutable view of destination image data
+                let mut dst_view = dst_image.view_mut();
+
+                // Resize source image into buffer of destination image
+                self.resizer
+                    .resize(&src_image.view(), &mut dst_view)
+                    .unwrap();
+
+                alpha_mul_div.divide_alpha_inplace(&mut dst_view).unwrap();
+
+                ImageData::new_with_u8_clamped_array_and_sh(
+                    Clamped(dst_image.buffer()),
+                    dst_width.get(),
+                    dst_height.get(),
+                )
             }
-            Err(errors) => Err(format!("{:?}", *errors).into()),
+            Err(errors) => Err(format!(
+                "{:?}",
+                errors
+                    .into_iter()
+                    .map(|e| e.message)
+                    .collect::<Vec<EcoString>>()
+            )
+            .into()),
         }
     }
 }
 
 impl World for SystemWorld {
-    fn root(&self) -> &Path {
-        &self.root
-    }
-
     fn library(&self) -> &Prehashed<Library> {
         &self.library
-    }
-
-    fn main(&self) -> &Source {
-        self.source(self.main)
-    }
-
-    fn resolve(&self, path: &Path) -> FileResult<SourceId> {
-        let path = self.root.join(path);
-        let path = path.as_path();
-        self.slot(path)?
-            .source
-            .get_or_init(|| {
-                let buf = self.read_file(path)?;
-                let text = String::from_utf8(buf)?;
-                Ok(self.insert(path, text))
-            })
-            .clone()
-    }
-
-    fn source(&self, id: SourceId) -> &Source {
-        &self.sources[id.into_u16() as usize]
     }
 
     fn book(&self) -> &Prehashed<FontBook> {
         &self.book
     }
 
-    fn font(&self, id: usize) -> Option<Font> {
-        let slot = &self.fonts[id];
-        slot.font
-            .get_or_init(|| Font::new(slot.buffer.clone(), slot.index))
-            .clone()
+    fn main(&self) -> Source {
+        self.source(self.main).unwrap()
     }
 
-    fn file(&self, path: &Path) -> FileResult<Buffer> {
-        let path = self.root.join(path);
-        let path = path.as_path();
-        self.slot(path)?
-            .buffer
-            .get_or_init(|| self.read_file(path).map(Buffer::from))
-            .clone()
+    fn source(&self, id: FileId) -> FileResult<Source> {
+        self.slot(id)?.source()
+    }
+
+    fn file(&self, id: FileId) -> FileResult<Bytes> {
+        self.slot(id)?.file()
+    }
+
+    fn font(&self, index: usize) -> Option<Font> {
+        Some(self.fonts[index].clone())
+    }
+
+    fn today(&self, _: Option<i64>) -> Option<Datetime> {
+        None
     }
 }
 
 impl SystemWorld {
-    fn slot(&self, path: &Path) -> FileResult<RefMut<PathSlot>> {
-        let mut hashes = self.hashes.borrow_mut();
-        let hash = match hashes.get(path).cloned() {
-            Some(hash) => hash,
-            None => {
-                let hash = PathHash::new(Buffer::from(self.read_file(path)?));
-                if let Ok(canon) = path.canonicalize() {
-                    hashes.insert(canon.normalize(), hash);
-                }
-                hashes.insert(path.into(), hash);
-                hash
-            }
-        };
-
-        Ok(std::cell::RefMut::map(self.paths.borrow_mut(), |paths| {
-            paths.entry(hash).or_default()
-        }))
-    }
-
-    fn insert(&self, path: &Path, text: String) -> SourceId {
-        let id = SourceId::from_u16(self.sources.len() as u16);
-        let source = Source::new(id, path, text);
-        self.sources.push(Box::new(source));
-        id
-    }
-
-    fn read_file(&self, path: &Path) -> FileResult<Vec<u8>> {
-        let f1 = |e: JsValue| {
-            console::error_1(&e);
-            FileError::Other
-        };
+    fn read_file(&self, path: &Path) -> FileResult<String> {
+        let f = |_e: JsValue| FileError::Other;
         Ok(self
-            .js_read_file
+            .js_request_data
             .call1(&JsValue::NULL, &path.to_str().unwrap().into())
-            .map_err(f1)?
+            .map_err(f)?
             .as_string()
-            .unwrap()
-            .into_bytes())
-    }
-}
-
-/// Holds details about the location of a font and lazily the font itself.
-struct FontSlot {
-    buffer: Buffer,
-    index: u32,
-    font: OnceCell<Option<Font>>,
-}
-
-/// A hash that is the same for all paths pointing to the same entity.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-struct PathHash(u128);
-
-impl PathHash {
-    fn new(handle: Buffer) -> Self {
-        // let handle = Buffer::from(read(path)?);
-        let mut state = SipHasher::new();
-        handle.hash(&mut state);
-        Self(state.finish128().as_u128())
-    }
-}
-
-/// Holds canonical data for all paths pointing to the same entity.
-#[derive(Default)]
-struct PathSlot {
-    source: OnceCell<FileResult<SourceId>>,
-    buffer: OnceCell<FileResult<Buffer>>,
-}
-
-struct FontSearcher {
-    book: FontBook,
-    fonts: Vec<FontSlot>,
-}
-
-impl FontSearcher {
-    fn new() -> Self {
-        Self {
-            book: FontBook::new(),
-            fonts: vec![],
-        }
+            .unwrap())
     }
 
-    fn add_embedded(&mut self) {
-        let mut add = |bytes: &'static [u8]| {
-            let buffer = Buffer::from_static(bytes);
-            for (i, font) in Font::iter(buffer.clone()).enumerate() {
-                self.book.push(font.info().clone());
-                self.fonts.push(FontSlot {
-                    buffer: buffer.clone(),
-                    index: i as u32,
-                    font: OnceCell::from(Some(font)),
-                });
-            }
-        };
-
-        // Embed default fonts.
-        add(include_bytes!("../assets/fonts/LinLibertine_R.ttf"));
-        add(include_bytes!("../assets/fonts/LinLibertine_RB.ttf"));
-        add(include_bytes!("../assets/fonts/LinLibertine_RBI.ttf"));
-        add(include_bytes!("../assets/fonts/LinLibertine_RI.ttf"));
-        add(include_bytes!("../assets/fonts/NewCMMath-Book.otf"));
-        add(include_bytes!("../assets/fonts/NewCMMath-Regular.otf"));
-        add(include_bytes!("../assets/fonts/DejaVuSansMono.ttf"));
-        add(include_bytes!("../assets/fonts/DejaVuSansMono-Bold.ttf"));
-        add(include_bytes!("../assets/fonts/DejaVuSansMono-Oblique.ttf"));
-        add(include_bytes!(
-            "../assets/fonts/DejaVuSansMono-BoldOblique.ttf"
-        ));
-    }
-
-    async fn search_system(&mut self) -> Result<(), JsValue> {
-        if let Some(window) = web_sys::window() {
-            for fontdata in JsFuture::from(window.query_local_fonts()?)
-                .await?
-                .dyn_into::<js_sys::Array>()?
-                .to_vec()
-            {
-                let buffer = Buffer::from(
-                    js_sys::Uint8Array::new(
-                        &JsFuture::from(
-                            JsFuture::from(fontdata.dyn_into::<FontData>()?.blob())
-                                .await?
-                                .dyn_into::<Blob>()?
-                                .array_buffer(),
-                        )
-                        .await?,
-                    )
-                    .to_vec(),
-                );
-                for (i, info) in FontInfo::iter(buffer.as_slice()).enumerate() {
-                    self.book.push(info);
-                    self.fonts.push(FontSlot {
-                        buffer: buffer.clone(),
-                        index: i as u32,
-                        font: OnceCell::new(),
-                    })
+    fn prepare_package(&self, spec: &PackageSpec) -> PackageResult<PathBuf> {
+        let f = |e: JsValue| {
+            if let Some(num) = e.as_f64() {
+                if num == -2.0 {
+                    return PackageError::NotFound(spec.clone());
                 }
             }
-        }
-        Ok(())
+            PackageError::Other
+        };
+        self.packages
+            .borrow_mut()
+            .entry(spec.clone())
+            .or_insert_with(|| {
+                Ok(self
+                    .js_request_data
+                    .call1(
+                        &JsValue::NULL,
+                        &format!("@{}/{}-{}", spec.namespace, spec.name, spec.version).into(),
+                    )
+                    .map_err(f)?
+                    .as_string()
+                    .unwrap()
+                    .into())
+            })
+            .clone()
+    }
+
+    fn slot(&self, id: FileId) -> FileResult<RefMut<PathSlot>> {
+        let mut system_path = PathBuf::new();
+        let mut text = String::new();
+        let hash = self
+            .hashes
+            .borrow_mut()
+            .entry(id)
+            .or_insert_with(|| {
+                let root = match id.package() {
+                    Some(spec) => self.prepare_package(spec)?,
+                    None => self.root.clone(),
+                };
+
+                system_path = root.join_rooted(id.path()).ok_or(FileError::AccessDenied)?;
+                text = self.read_file(&system_path)?;
+
+                Ok(PathHash::new(&text))
+            })
+            .clone()?;
+
+        Ok(RefMut::map(self.paths.borrow_mut(), |paths| {
+            paths.entry(hash).or_insert_with(|| PathSlot {
+                id,
+                source: Ok(Source::new(id, text)),
+                buffer: OnceCell::new(),
+                system_path,
+            })
+        }))
     }
 }

@@ -2,15 +2,20 @@
 
 Renders `typst` code blocks, and optionally math blocks, into images using [Typst](https://github.com/typst/typst) through the power of WASM! This is still very much in development, so suggestions and bugs are welcome!
 
-## Things to NOTE
+## Small Things to NOTE
+- This plugin uses Typst 0.6.0
 - Typst does not currently support exporting to HTML only PDFs and PNGs. So due to image scaling, the rendered views may look a bit terrible. If you know how to fix this PLEASE HELP.
 - File paths should be relative to the vault folder.
 - System fonts are not loaded by default as this takes about 20 seconds (on my machine). There is an option in settings to enable them (requires a reload of the plugin).
+- You can not import on mobile as file reading is NOT supported on mobile, this is due to `SharedArrayBuffer`s not being available on mobile but is available for some reason on desktop.
+
+## Using Packages
+The plugin supports only the reading of packages from the [`@preview`](https://github.com/typst/packages#downloads) and [`@local`](https://github.com/typst/packages#local-packages) namespaces. Please use the Typst cli to download your desired packages. This means the plugin accesses files outside of your vault but only to read them, it does not modify or create files outside of your vault.
 
 ## Math Block Usage
-The plugin can render `typst` inside math blocks! By default this is off, to enable it set the "Override Math Blocks" setting or use the "Toggle Math Block Override" command. Math block types are conserved between Obsidian and Typst, `$...$` -> `$...$` and `$$...$$` -> `$ ... $`.
+The plugin can render `typst` inside math blocks! By default this is off, to enable it set the "Override Math Blocks" setting or use the "Toggle math block override" command. Math block types are conserved between Obsidian and Typst, `$...$` -> `$...$` and `$$...$$` -> `$ ... $`.
 
-From what I've experimented with, normal math blocks are okay with `typst` code but Typst is not happy with any Latex code.
+From what I've experimented with, normal math blocks are okay with Typst but Typst is not happy with any Latex code.
 
 For styling and using imports with math blocks see the next section.
 
@@ -23,10 +28,8 @@ Preamables are prepended to your `typst` code before compiling. There are three 
 - `code`: Prepended to `typst` code only in code blocks.
 
 ## Known Issues
-### "File Not Found" Error on First Load of Obsidian
-When Obsidian first loads it sometimes tries to render before its files are resolved and cached. 
-
-To fix, simply select then deselect everything in the file, or close and re-open the file.
+### Runtime Error Unreachable or Recursive Use Of Object
+These occur when the Typst compiler panics for any reason and means the compiler cannot be used again until it is restarted. There should be more information in the console log so please create an issue with this error!
 
 ## Example
 
@@ -61,14 +64,20 @@ The first #count numbers of the sequence are:
 <img src="assets/example.png">
 
 ## Installation
-Until this plugin is submitted to the community plugins please install it by copying `main.js`, `styles.css`, and `manifest.json` from the releases tab to the folder `.obsidian/plugins/obsidian-typst` in your vault.
+Install "Typst Renderer" from the community plugins tab in settings
+
+or 
+
+Install it by copying `main.js`, `styles.css`, and `manifest.json` from the releases tab to the folder `.obsidian/plugins/obsidian-typst` in your vault.
 
 ## TODO / Goals (In no particular order)
 - [x] Better font loading
 - [x] Fix importing
 - [x] Fix Github Actions
 - [ ] Better error handling
-- [ ] Fix output image scaling
+- [x]? Fix output image scaling
 - [ ] Use HTML output
 - [x] Override default equation rendering
 - [ ] Custom editor for `.typ` files
+- [ ] Mobile file reading
+- [ ] Automate package downloading
