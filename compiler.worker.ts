@@ -8,7 +8,6 @@ typst.initSync(wasmBin);
 
 let canUseSharedArrayBuffer = new Boolean(false);
 
-// let buffer: Int32Array;
 let decoder = new TextDecoder()
 
 function requestData(path: string): string {
@@ -27,34 +26,13 @@ function requestData(path: string): string {
     throw buffer[0]
 }
 
-let compiler = new typst.SystemWorld("", requestData)
-const compileAttempts = 5;
-
-// function compile(data: CompileCommand) {
-//     for (let i = 1; i <= compileAttempts; i += 1) {
-//         try {
-//             return compiler.compile(data.source, data.path, data.pixel_per_pt, data.fill, data.size, data.display)
-//         } catch (error) {
-//             if (i < compileAttempts && ((error.name == "RuntimeError" && error.message == "unreachable") || (error.name == "Uncaught Error"))) {
-//                 console.warn("Typst compiler crashed, attempting to restart: ", i);
-//                 console.log(data);
-
-//                 compiler.free()
-//                 compiler = new typst.SystemWorld("", requestData)
-//             } else {
-//                 console.log("name", error.name);
-//                 console.log("message", error.message);
-
-//                 throw error;
-//             }
-//         }
-//     }
-// }
-
+const compiler = new typst.SystemWorld("", requestData)
 
 onmessage = (ev: MessageEvent<CompileCommand | true>) => {
     if (ev.data == true) {
         canUseSharedArrayBuffer = ev.data
+    } else if (ev.data instanceof Array) {
+        ev.data.forEach(font => compiler.add_font(new Uint8Array(font)))
     } else if ("source" in ev.data) {
         const data: CompileCommand = ev.data;
         postMessage(compiler.compile(data.source, data.path, data.pixel_per_pt, data.fill, data.size, data.display))
