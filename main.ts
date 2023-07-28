@@ -1,7 +1,7 @@
 import { App, renderMath, HexString, Platform, Plugin, PluginSettingTab, Setting, loadMathJax, normalizePath } from 'obsidian';
 
 // @ts-ignore
-import Worker from "./compiler.worker.ts"
+import CompilerWorker from "./compiler.worker.ts"
 
 import TypstCanvasElement from 'typst-canvas-element';
 import { WorkerRequest } from 'types.js';
@@ -12,6 +12,7 @@ interface TypstPluginSettings {
     pixel_per_pt: number,
     search_system: boolean,
     override_math: boolean,
+    font_families: string[],
     preamable: {
         shared: string,
         math: string,
@@ -25,6 +26,7 @@ const DEFAULT_SETTINGS: TypstPluginSettings = {
     pixel_per_pt: 3,
     search_system: false,
     override_math: false,
+    font_families: [],
     preamable: {
         shared: "#set text(fill: white, size: SIZE)\n#set page(width: WIDTH, height: HEIGHT)",
         math: "#set page(margin: 0pt)\n#set align(horizon)",
@@ -44,7 +46,7 @@ export default class TypstPlugin extends Plugin {
     fs: any;
 
     async onload() {
-        this.compilerWorker = new Worker();
+        this.compilerWorker = (new CompilerWorker() as Worker);
         if (!Platform.isMobileApp) {
             this.compilerWorker.postMessage(true);
             this.fs = require("fs")
@@ -53,11 +55,23 @@ export default class TypstPlugin extends Plugin {
         this.textEncoder = new TextEncoder()
         await this.loadSettings()
 
+        let fonts = await Promise.all(
+            //@ts-expect-error
+            (await window.queryLocalFonts() as Array)
+                .filter((font: { family: string; name: string; }) => this.settings.font_families.contains(font.family.toLowerCase()))
+                .map(
+                    async (font: { blob: () => Promise<Blob>; }) => await (await font.blob()).arrayBuffer()
+                )
+        )
+        this.compilerWorker.postMessage(fonts, fonts)
+
+        // Setup cutom canvas
         TypstCanvasElement.compile = (a, b, c, d, e) => this.processThenCompileTypst(a, b, c, d, e)
         if (customElements.get("typst-renderer") == undefined) {
             customElements.define("typst-renderer", TypstCanvasElement, { extends: "canvas" })
         }
 
+        // Setup MathJax
         await loadMathJax()
         renderMath("", false);
         // @ts-expect-error
@@ -70,8 +84,10 @@ export default class TypstPlugin extends Plugin {
             callback: () => this.overrideMathJax(!this.settings.override_math)
         })
 
-
+        // Settings
         this.addSettingTab(new TypstSettingTab(this.app, this));
+
+        // Code blocks
         this.registerMarkdownCodeBlockProcessor("typst", async (source, el, ctx) => {
             el.appendChild(this.createTypstCanvas("/" + ctx.sourcePath, `${this.settings.preamable.code}\n${source}`, true, false))
         })
@@ -80,9 +96,6 @@ export default class TypstPlugin extends Plugin {
         console.log("loaded Typst Renderer");
     }
 
-    // async loadCompilerWorker() {
-    //     this.compilerWorker.
-    // }
 
     async compileToTypst(path: string, source: string, size: number, display: boolean): Promise<ImageData> {
         return await navigator.locks.request("typst renderer compiler", async (lock) => {
@@ -269,6 +282,7 @@ class TypstSettingTab extends PluginSettingTab {
         this.plugin = plugin;
     }
 
+
     display(): void {
         const { containerEl } = this;
 
@@ -316,19 +330,6 @@ class TypstSettingTab extends PluginSettingTab {
             )
 
         new Setting(containerEl)
-            .setName("Search System Fonts")
-            .setDesc(`Whether the plugin should search for system fonts.
-            This is off by default as it takes around 20 seconds to complete but it gives access to more fonts.
-            Requires reload of plugin.`)
-            .addToggle((toggle) => {
-                toggle.setValue(this.plugin.settings.search_system)
-                    .onChange(async (value) => {
-                        this.plugin.settings.search_system = value;
-                        await this.plugin.saveSettings();
-                    })
-            })
-
-        new Setting(containerEl)
             .setName("Override Math Blocks")
             .addToggle((toggle) => {
                 toggle.setValue(this.plugin.settings.override_math)
@@ -344,5 +345,50 @@ class TypstSettingTab extends PluginSettingTab {
         new Setting(containerEl)
             .setName("Math Block Preamable")
             .addTextArea((c) => c.setValue(this.plugin.settings.preamable.math).onChange(async (value) => { this.plugin.settings.preamable.math = value; await this.plugin.saveSettings() }))
+
+        //Font family settings
+        const fontSettings = containerEl.createDiv({ cls: "setting-item font-settings" })
+        fontSettings.createDiv({ text: "Fonts", cls: "setting-item-name" })
+        fontSettings.createDiv({ text: "Font family names that should be loaded for Typst from your system. Requires a reload on change.", cls: "setting-item-description" })
+
+        const addFontsDiv = fontSettings.createDiv({ cls: "add-fonts-div" })
+        const fontsInput = addFontsDiv.createEl('input', { type: "text", placeholder: "Enter a font family", cls: "font-input", })
+        const addFontBtn = addFontsDiv.createEl('button', { text: "Add" })
+
+        const fontTagsDiv = fontSettings.createDiv({ cls: "font-tags-div" })
+
+        const addFontTag = async () => {
+            if (!this.plugin.settings.font_families.contains(fontsInput.value)) {
+                this.plugin.settings.font_families.push(fontsInput.value.toLowerCase())
+                await this.plugin.saveSettings()
+            }
+            fontsInput.value = ''
+            this.renderFontTags(fontTagsDiv)
+        }
+
+        fontsInput.addEventListener('keydown', async (ev) => {
+            if (ev.key == "Enter") {
+                addFontTag()
+            }
+        })
+        addFontBtn.addEventListener('click', async () => addFontTag())
+
+        this.renderFontTags(fontTagsDiv)
     }
+
+
+    renderFontTags(fontTagsDiv: HTMLDivElement) {
+        fontTagsDiv.innerHTML = ''
+        this.plugin.settings.font_families.forEach((fontFamily) => {
+            const fontTag = fontTagsDiv.createEl('span', { cls: "font-tag" })
+            fontTag.createEl('span', { text: fontFamily, cls: "font-tag-text" })
+            const removeBtn = fontTag.createEl('span', { text: "x", cls: "tag-btn" })
+            removeBtn.addEventListener('click', async () => {
+                this.plugin.settings.font_families.remove(fontFamily)
+                await this.plugin.saveSettings()
+                this.renderFontTags(fontTagsDiv)
+            })
+        })
+    }
+
 }

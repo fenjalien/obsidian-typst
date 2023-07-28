@@ -20,10 +20,8 @@ use typst::{
 use wasm_bindgen::{prelude::*, Clamped};
 use web_sys::ImageData;
 
-mod fonts;
 mod paths;
 
-use crate::fonts::FontSearcher;
 use crate::paths::{PathHash, PathSlot};
 
 /// A world that provides access to the operating system.
@@ -61,15 +59,15 @@ impl SystemWorld {
     #[wasm_bindgen(constructor)]
     pub fn new(root: String, js_read_file: &js_sys::Function) -> SystemWorld {
         console_error_panic_hook::set_once();
-        let mut searcher = FontSearcher::new();
-        searcher.add_embedded();
+
+        let (book, fonts) = SystemWorld::start_embedded_fonts();
 
         Self {
             root: PathBuf::from(root),
             main: FileId::detached(),
             library: Prehashed::new(typst_library::build()),
-            book: Prehashed::new(searcher.book),
-            fonts: searcher.fonts,
+            book: Prehashed::new(book),
+            fonts,
             hashes: RefCell::default(),
             paths: RefCell::default(),
             today: OnceCell::new(),
@@ -77,12 +75,6 @@ impl SystemWorld {
             resizer: fr::Resizer::default(),
             js_request_data: js_read_file.clone(),
         }
-    }
-
-    fn reset(&mut self) {
-        self.hashes.borrow_mut().clear();
-        self.paths.borrow_mut().clear();
-        self.today.take();
     }
 
     pub fn compile(
@@ -177,6 +169,22 @@ impl SystemWorld {
             .into()),
         }
     }
+
+    pub fn add_font(&mut self, data: Vec<u8>) {
+        let buffer = Bytes::from(data);
+        let mut font_infos = Vec::new();
+        for font in Font::iter(buffer) {
+            font_infos.push(font.info().clone());
+            self.fonts.push(font)
+        }
+        if font_infos.len() > 0 {
+            self.book.update(|b| {
+                for info in font_infos {
+                    b.push(info)
+                }
+            });
+        }
+    }
 }
 
 impl World for SystemWorld {
@@ -210,6 +218,12 @@ impl World for SystemWorld {
 }
 
 impl SystemWorld {
+    fn reset(&mut self) {
+        self.hashes.borrow_mut().clear();
+        self.paths.borrow_mut().clear();
+        self.today.take();
+    }
+
     fn read_file(&self, path: &Path) -> FileResult<String> {
         let f = |_e: JsValue| FileError::Other;
         Ok(self
@@ -275,5 +289,38 @@ impl SystemWorld {
                 system_path,
             })
         }))
+    }
+
+    fn start_embedded_fonts() -> (FontBook, Vec<Font>) {
+        let mut book = FontBook::new();
+        let mut fonts = Vec::new();
+
+        let mut process = |bytes: &'static [u8]| {
+            let buffer = Bytes::from_static(bytes);
+            for font in Font::iter(buffer) {
+                book.push(font.info().clone());
+                fonts.push(font);
+            }
+        };
+
+        macro_rules! add {
+            ($filename:literal) => {
+                process(include_bytes!(concat!("../assets/fonts/", $filename)));
+            };
+        }
+
+        // Embed default fonts.
+        add!("LinLibertine_R.ttf");
+        add!("LinLibertine_RB.ttf");
+        add!("LinLibertine_RBI.ttf");
+        add!("LinLibertine_RI.ttf");
+        add!("NewCMMath-Book.otf");
+        add!("NewCMMath-Regular.otf");
+        add!("DejaVuSansMono.ttf");
+        add!("DejaVuSansMono-Bold.ttf");
+        add!("DejaVuSansMono-Oblique.ttf");
+        add!("DejaVuSansMono-BoldOblique.ttf");
+
+        return (book, fonts);
     }
 }
