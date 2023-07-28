@@ -4,7 +4,8 @@ textarea {
     resize: vertical;
 }
 
-.setting-item:has(textarea) {
+.setting-item:has(textarea),
+.font-settings {
     flex-direction: column;
     gap: 0.5em;
     align-items: stretch;
@@ -12,4 +13,43 @@ textarea {
 
 .is-disabled {
     display: none;
+}
+
+.add-fonts-div {
+    display: flex;
+    gap: 0.5em;
+}
+
+.font-input {
+    flex-grow: 1;
+}
+
+.font-tags-div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5em;
+}
+
+.font-tag {
+    background-color: var(--interactive-normal); /* #363636 */
+    border-radius: 20px;
+    padding: 0.5em 0.6em 0.5em 1em;
+}
+
+.tag-btn {
+    margin-left: 0.6em;
+    padding: 0.4em;
+}
+
+.font-tag-text {
+    font-size: var(--font-ui-small);
+}
+
+button,
+.tag-btn {
+    cursor: pointer;
+}
+
+.tag-btn:hover {
+    color: var(--interactive-accent);
 }
