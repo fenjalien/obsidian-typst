@@ -20,10 +20,8 @@ use typst::{
 use wasm_bindgen::{prelude::*, Clamped};
 use web_sys::ImageData;
 
-mod fonts;
 mod paths;
 
-use crate::fonts::FontSearcher;
 use crate::paths::{PathHash, PathSlot};
 
 /// A world that provides access to the operating system.
