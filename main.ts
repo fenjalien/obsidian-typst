@@ -283,6 +283,7 @@ class TypstSettingTab extends PluginSettingTab {
         this.plugin = plugin;
     }
 
+
     display(): void {
         const { containerEl } = this;
 
@@ -358,5 +359,43 @@ class TypstSettingTab extends PluginSettingTab {
         new Setting(containerEl)
             .setName("Math Block Preamable")
             .addTextArea((c) => c.setValue(this.plugin.settings.preamable.math).onChange(async (value) => { this.plugin.settings.preamable.math = value; await this.plugin.saveSettings() }))
+
+        //Font family settings
+        const fontSettings = containerEl.createDiv({cls: "setting-item font-settings"})
+        fontSettings.createDiv({text: "Font Families", cls: "setting-item-name"})
+
+        const addFontsDiv = fontSettings.createDiv({cls: "add-fonts-div"})
+        const fontsInput = addFontsDiv.createEl('input', {type: "text", placeholder: "Enter a font family", cls: "font-input",})
+        const addFontBtn = addFontsDiv.createEl('button', {text: "Add"})
+
+        const fontTagsDiv = fontSettings.createDiv({cls: "font-tags-div"})
+
+        addFontBtn.addEventListener('click', async () => {
+            if (!this.plugin.settings.font_families.contains(fontsInput.value)) {
+                this.plugin.settings.font_families.push(fontsInput.value)
+                await this.plugin.saveSettings()
+            }
+            fontsInput.value = ''
+
+            this.renderFontTags(fontTagsDiv)
+        })
+
+        this.renderFontTags(fontTagsDiv)
+
     }
+
+    renderFontTags(fontTagsDiv: HTMLDivElement) {
+        fontTagsDiv.innerHTML = ''
+        this.plugin.settings.font_families.forEach((fontFamily) => {
+            const fontTag = fontTagsDiv.createEl('span', {cls: "font-tag"})
+            fontTag.createEl('span', {text: fontFamily, cls: "font-tag-text"})
+            const removeBtn = fontTag.createEl('span', {text: "x", cls: "tag-btn"})
+            removeBtn.addEventListener('click', async () => {
+                this.plugin.settings.font_families.remove(fontFamily)
+                await this.plugin.saveSettings()
+                this.renderFontTags(fontTagsDiv)
+            })
+        })
+    }
+
 }
