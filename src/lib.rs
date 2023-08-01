@@ -82,6 +82,7 @@ impl SystemWorld {
         text: String,
         path: String,
         pixel_per_pt: f32,
+        scale: f32,
         fill: String,
         size: u32,
         display: bool,
@@ -107,7 +108,7 @@ impl SystemWorld {
             Ok(document) => {
                 let mut pixmap = typst::export::render(
                     &document.pages[0],
-                    pixel_per_pt,
+                    pixel_per_pt * scale,
                     Color::Rgba(RgbaColor::from_str(&fill)?),
                 );
 
@@ -128,16 +129,17 @@ impl SystemWorld {
                     .multiply_alpha_inplace(&mut src_image.view_mut())
                     .unwrap();
 
+                let scaled_size = ((size as f32) * scale).floor() as u32;
                 let dst_width = NonZeroU32::new(if display {
-                    size
+                    scaled_size
                 } else {
-                    ((size as f32 / height as f32) * width as f32) as u32
+                    ((scaled_size as f32 / height as f32) * width as f32) as u32
                 })
                 .unwrap_or(NonZeroU32::MIN);
                 let dst_height = NonZeroU32::new(if display {
-                    ((size as f32 / width as f32) * height as f32) as u32
+                    ((scaled_size as f32 / width as f32) * height as f32) as u32
                 } else {
-                    size
+                    scaled_size
                 })
                 .unwrap_or(NonZeroU32::MIN);
 

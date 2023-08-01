@@ -2,6 +2,7 @@ export interface CompileCommand {
     source: string;
     path: string;
     pixel_per_pt: number;
+    scale: number;
     fill: string;
     size: number;
     display: boolean;

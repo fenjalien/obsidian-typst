@@ -66,7 +66,7 @@ export default class TypstPlugin extends Plugin {
         this.compilerWorker.postMessage(fonts, fonts)
 
         // Setup cutom canvas
-        TypstCanvasElement.compile = (a, b, c, d, e) => this.processThenCompileTypst(a, b, c, d, e)
+        TypstCanvasElement.compile = (a, b, c, d, e, f) => this.processThenCompileTypst(a, b, c, d, e, f)
         if (customElements.get("typst-renderer") == undefined) {
             customElements.define("typst-renderer", TypstCanvasElement, { extends: "canvas" })
         }
@@ -97,13 +97,14 @@ export default class TypstPlugin extends Plugin {
     }
 
 
-    async compileToTypst(path: string, source: string, size: number, display: boolean): Promise<ImageData> {
+    async compileToTypst(path: string, source: string, size: number, display: boolean, scale: number): Promise<ImageData> {
         return await navigator.locks.request("typst renderer compiler", async (lock) => {
             this.compilerWorker.postMessage({
                 source,
                 path,
                 pixel_per_pt: this.settings.pixel_per_pt,
                 fill: `${this.settings.fill}${this.settings.noFill ? "00" : "ff"}`,
+                scale: scale,
                 size,
                 display
             });
@@ -219,15 +220,15 @@ export default class TypstPlugin extends Plugin {
         throw "Cannot find cache directory on an unknown platform"
     }
 
-    async processThenCompileTypst(path: string, source: string, size: number, display: boolean, fontSize: number) {
-        const dpr = window.devicePixelRatio;
-        const pxToPt = (px: number) => (px * dpr * (72 / 96)).toString() + "pt"
+    async processThenCompileTypst(path: string, source: string, size: number, display: boolean, fontSize: number, scale: number) {
+        const pxToPt = (px: number) => (px * scale * (72 / 96)).toString() + "pt"
         const sizing = `#let (WIDTH, HEIGHT, SIZE) = (${display ? pxToPt(size) : "auto"}, ${!display ? pxToPt(size) : "auto"}, ${pxToPt(fontSize)})`
         return this.compileToTypst(
             path,
             `${sizing}\n${this.settings.preamable.shared}\n${source}`,
             size,
-            display
+            display,
+            scale
         )
     }
 
@@ -237,6 +238,7 @@ export default class TypstPlugin extends Plugin {
         canvas.path = path
         canvas.display = display
         canvas.math = math
+        canvas.scale = window.devicePixelRatio
         return canvas
     }
 

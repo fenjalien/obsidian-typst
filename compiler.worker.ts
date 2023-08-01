@@ -35,7 +35,7 @@ onmessage = (ev: MessageEvent<CompileCommand | true>) => {
         ev.data.forEach(font => compiler.add_font(new Uint8Array(font)))
     } else if ("source" in ev.data) {
         const data: CompileCommand = ev.data;
-        postMessage(compiler.compile(data.source, data.path, data.pixel_per_pt, data.fill, data.size, data.display))
+        postMessage(compiler.compile(data.source, data.path, data.pixel_per_pt, data.scale, data.fill, data.size, data.display))
 
         // postMessage(compile(ev.data))
     } else {

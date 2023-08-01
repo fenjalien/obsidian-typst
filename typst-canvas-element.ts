@@ -1,5 +1,5 @@
 export default class TypstCanvasElement extends HTMLCanvasElement {
-    static compile: (path: string, source: string, size: number, display: boolean, fontSize: number) => Promise<ImageData>;
+    static compile: (path: string, source: string, size: number, display: boolean, fontSize: number, scale: number) => Promise<ImageData>;
     static nextId = 0;
     static prevHeight = 0;
 
@@ -8,6 +8,7 @@ export default class TypstCanvasElement extends HTMLCanvasElement {
     source: string
     path: string
     display: boolean
+    scale: number
     resizeObserver: ResizeObserver
     size: number
     math: boolean
@@ -60,9 +61,10 @@ export default class TypstCanvasElement extends HTMLCanvasElement {
 
                 let image: ImageData;
                 let ctx = this.getContext("2d")!;
+
                 try {
                     image =
-                        await TypstCanvasElement.compile(this.path, this.source, this.size, this.display, fontSize)
+                        await TypstCanvasElement.compile(this.path, this.source, this.size, this.display, fontSize, this.scale)
                 } catch (error) {
                     console.error(error);
                     this.outerText = error
