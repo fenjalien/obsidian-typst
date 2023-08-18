@@ -337,13 +337,13 @@ class TypstSettingTab extends PluginSettingTab {
             });
 
         new Setting(containerEl)
-            .setName("Shared Preamable")
+            .setName("Shared Preamble")
             .addTextArea((c) => c.setValue(this.plugin.settings.preamable.shared).onChange(async (value) => { this.plugin.settings.preamable.shared = value; await this.plugin.saveSettings() }))
         new Setting(containerEl)
-            .setName("Code Block Preamable")
+            .setName("Code Block Preamble")
             .addTextArea((c) => c.setValue(this.plugin.settings.preamable.code).onChange(async (value) => { this.plugin.settings.preamable.code = value; await this.plugin.saveSettings() }))
         new Setting(containerEl)
-            .setName("Math Block Preamable")
+            .setName("Math Block Preamble")
             .addTextArea((c) => c.setValue(this.plugin.settings.preamable.math).onChange(async (value) => { this.plugin.settings.preamable.math = value; await this.plugin.saveSettings() }))
 
         //Font family settings
