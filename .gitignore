@@ -24,4 +24,4 @@ data.json
 
 # Added by cargo
 
-/target
+target

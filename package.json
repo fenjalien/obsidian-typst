@@ -4,11 +4,12 @@
 	"description": "Renders `typst` code blocks to images with Typst.",
 	"main": "main.js",
 	"scripts": {
-		"wasm": "wasm-pack build --target web",
-		"dev": "node esbuild.config.mjs",
-		"wasm-dev": "wasm-pack build --target web --dev && node esbuild.config.mjs",
-		"wasm-build": "wasm-pack build --target web && tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"build-dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"wasm": "wasm-pack build compiler --target web",
+		"wasm-dev": "wasm-pack build compiler --target web --dev",
+		"wasm-build-dev": "npm run wasm-dev && npm run build-dev",
+		"wasm-build": "npm run wasm && npm run build",
 		"version": "node version-bump.mjs && git add manifest.json versions.json"
 	},
 	"keywords": [],

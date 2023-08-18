@@ -3,8 +3,8 @@ import { App, renderMath, HexString, Platform, Plugin, PluginSettingTab, Setting
 // @ts-ignore
 import CompilerWorker from "./compiler.worker.ts"
 
-import TypstCanvasElement from 'typst-canvas-element';
-import { WorkerRequest } from 'types.js';
+import TypstCanvasElement from './typst-canvas-element';
+import { WorkerRequest } from './types';
 
 interface TypstPluginSettings {
     noFill: boolean,
