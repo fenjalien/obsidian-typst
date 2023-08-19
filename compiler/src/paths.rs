@@ -1,7 +1,11 @@
 use std::{cell::OnceCell, hash::Hash, path::PathBuf};
 
 use siphasher::sip128::{Hasher128, SipHasher13};
-use typst::{diag::FileResult, file::FileId, syntax::Source, util::Bytes};
+use typst::{
+    diag::FileResult,
+    eval::Bytes,
+    syntax::{FileId, Source},
+};
 
 /// Holds canonical data for all pahts pointing to the same entity.
 ///
