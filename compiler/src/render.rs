@@ -1,21 +1,27 @@
-use std::{num::NonZeroU32, str::FromStr};
+use std::{collections::HashMap, num::NonZeroU32, str::FromStr, cell::Ref};
 
+use ariadne::{Config, FnCache, Label, Report, ReportKind, Source, Span};
+// use ariadne::{Report, ReportKind};
 use fast_image_resize as fr;
 use fr::Resizer;
 use typst::{
+    diag::{Severity, SourceDiagnostic},
     doc::Document,
     geom::{Color, RgbaColor},
+    syntax::FileId,
 };
 use wasm_bindgen::Clamped;
 use web_sys::ImageData;
 
+use crate::file_entry::FileEntry;
+
 pub fn to_image(
     resizer: &mut Resizer,
     document: Document,
-    size: u32,
-    display: bool,
     fill: String,
     pixel_per_pt: f32,
+    size: u32,
+    display: bool,
 ) -> Result<ImageData, wasm_bindgen::JsValue> {
     let mut pixmap = typst::export::render(
         &document.pages[0],
@@ -68,4 +74,44 @@ pub fn to_image(
         dst_width.get(),
         dst_height.get(),
     );
+}
+
+// impl Into<()> for FileId {
+
+// }
+
+pub fn format_diagnostic(
+    sources: Ref<HashMap<FileId, FileEntry>>,
+    diagnostics: &[SourceDiagnostic],
+) -> String {
+    let mut bytes = Vec::new();
+
+    let cache = FnCache::new(|id| {
+        return sources.get(&id);
+    });
+
+    for diagnostic in diagnostics {
+        let id = diagnostic.span.id();
+        let source = sources.get(&id).unwrap().source();
+        let range = source.range(diagnostic.span);
+        let report = Report::build(
+            match diagnostic.severity {
+                Severity::Error => ReportKind::Error,
+                Severity::Warning => ReportKind::Warning,
+            },
+            "arst",
+            // id.path().to_str().unwrap(),
+            range.start,
+        )
+        .with_config(Config::default().with_color(false).with_tab_width(2))
+        .with_message(&diagnostic.message)
+        .with_label(Label::new(range))
+        .finish();
+        report
+            .write(Source::from(source.text()), &mut bytes)
+            .unwrap();
+        bytes.push(b'\n');
+    }
+
+    return String::from_utf8(bytes).unwrap();
 }

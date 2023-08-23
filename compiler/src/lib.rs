@@ -1,5 +1,6 @@
 use comemo::Prehashed;
 use fast_image_resize as fr;
+use render::format_diagnostic;
 use std::{
     cell::{OnceCell, RefCell, RefMut},
     collections::HashMap,
@@ -17,10 +18,10 @@ use typst::{
 use wasm_bindgen::prelude::*;
 use web_sys::ImageData;
 
-mod paths;
+mod file_entry;
 mod render;
 
-use crate::paths::{PathHash, PathSlot};
+use crate::file_entry::FileEntry;
 
 /// A world that provides access to the operating system.
 #[wasm_bindgen]
@@ -35,12 +36,8 @@ pub struct SystemWorld {
     book: Prehashed<FontBook>,
     /// Storage of fonts
     fonts: Vec<Font>,
-    /// Maps package-path combinations to canonical hashes. All package-path
-    /// combinations that point to thes same file are mapped to the same hash. To
-    /// be used in conjunction with `paths`.
-    hashes: RefCell<HashMap<FileId, FileResult<PathHash>>>,
-    /// Maps canonical path hashes to source files and buffers.
-    paths: RefCell<HashMap<PathHash, PathSlot>>,
+
+    files: RefCell<HashMap<FileId, FileEntry>>,
     /// The current date if requested. This is stored here to ensure it is
     /// always the same within one compilation. Reset between compilations.
     today: OnceCell<Option<Datetime>>,
@@ -66,8 +63,7 @@ impl SystemWorld {
             library: Prehashed::new(typst_library::build()),
             book: Prehashed::new(book),
             fonts,
-            hashes: RefCell::default(),
-            paths: RefCell::default(),
+            files: RefCell::default(),
             today: OnceCell::new(),
             packages: RefCell::default(),
             resizer: fr::Resizer::default(),
@@ -77,6 +73,7 @@ impl SystemWorld {
 
     pub fn compile(
         &mut self,
+        // command: CompileCommand,
         text: String,
         path: String,
         pixel_per_pt: f32,
@@ -86,33 +83,24 @@ impl SystemWorld {
     ) -> Result<ImageData, JsValue> {
         self.reset();
 
-        // Insert the main path slot
-        let system_path = PathBuf::from(path);
-        let hash = PathHash::new(&text);
-        self.main = FileId::new(None, &system_path);
-        self.hashes.borrow_mut().insert(self.main, Ok(hash));
-        self.paths.borrow_mut().insert(
-            hash,
-            PathSlot {
-                id: self.main,
-                system_path,
-                buffer: OnceCell::new(),
-                source: Ok(Source::new(self.main, text)),
-            },
+        self.main = FileId::new(None, &PathBuf::from(&path));
+        self.files.borrow_mut().insert(
+            self.main,
+            FileEntry::new(self.main, text), //     bytes: OnceCell::new(),
+                                             //     source: Source::new(self.main, text),
+                                             // },
         );
         let mut tracer = Tracer::default();
         match typst::compile(self, &mut tracer) {
-            Ok(document) => {
-                render::to_image(&mut self.resizer, document, size, display, fill, pixel_per_pt)
-            }
-            Err(errors) => Err(format!(
-                "{:?}",
-                errors
-                    .into_iter()
-                    .map(|e| e.message)
-                    .collect::<Vec<EcoString>>()
-            )
-            .into()),
+            Ok(document) => render::to_image(
+                &mut self.resizer,
+                document,
+                fill,
+                pixel_per_pt,
+                size,
+                display,
+            ),
+            Err(errors) => Err(format_diagnostic(self.files.borrow(), &errors).into()),
         }
     }
 
@@ -147,11 +135,11 @@ impl World for SystemWorld {
     }
 
     fn source(&self, id: FileId) -> FileResult<Source> {
-        self.slot(id)?.source()
+        Ok(self.file_entry(id)?.source())
     }
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
-        self.slot(id)?.file()
+        Ok(self.file_entry(id)?.bytes())
     }
 
     fn font(&self, index: usize) -> Option<Font> {
@@ -165,8 +153,7 @@ impl World for SystemWorld {
 
 impl SystemWorld {
     fn reset(&mut self) {
-        self.hashes.borrow_mut().clear();
-        self.paths.borrow_mut().clear();
+        self.files.borrow_mut().clear();
         self.today.take();
     }
 
@@ -207,33 +194,20 @@ impl SystemWorld {
             .clone()
     }
 
-    fn slot(&self, id: FileId) -> FileResult<RefMut<PathSlot>> {
-        let mut system_path = PathBuf::new();
-        let mut text = String::new();
-        let hash = self
-            .hashes
-            .borrow_mut()
-            .entry(id)
-            .or_insert_with(|| {
-                let root = match id.package() {
-                    Some(spec) => self.prepare_package(spec)?,
-                    None => self.root.clone(),
-                };
+    fn file_entry(&self, id: FileId) -> FileResult<RefMut<FileEntry>> {
+        if let Ok(file) = RefMut::filter_map(self.files.borrow_mut(), |files| files.get_mut(&id)) {
+            return Ok(file);
+        }
 
-                system_path = root.join_rooted(id.path()).ok_or(FileError::AccessDenied)?;
-                text = self.read_file(&system_path)?;
-
-                Ok(PathHash::new(&text))
-            })
-            .clone()?;
-
-        Ok(RefMut::map(self.paths.borrow_mut(), |paths| {
-            paths.entry(hash).or_insert_with(|| PathSlot {
-                id,
-                source: Ok(Source::new(id, text)),
-                buffer: OnceCell::new(),
-                system_path,
-            })
+        let path = match id.package() {
+            Some(spec) => self.prepare_package(spec)?,
+            None => self.root.clone(),
+        }
+        .join_rooted(id.path())
+        .ok_or(FileError::AccessDenied)?;
+        let text = self.read_file(&path)?;
+        Ok(RefMut::map(self.files.borrow_mut(), |files| {
+            return files.entry(id).or_insert(FileEntry::new(id, text));
         }))
     }
 

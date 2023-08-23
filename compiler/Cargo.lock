@@ -24,6 +24,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e999941b234f3131b00bc13c22d06e8c5ff726d1b6318ac7eb276997bbb4fef0"
 
 [[package]]
+name = "ariadne"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72fe02fc62033df9ba41cba57ee19acf5e742511a140c7dbc3a873e19a19a1bd"
+dependencies = [
+ "unicode-width",
+ "yansi",
+]
+
+[[package]]
 name = "arrayref"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -931,13 +941,13 @@ checksum = "e25be21376a772d15f97ae789845340a9651d3c4246ff5ebb6a2b35f9c37bd31"
 name = "obsidian-typst"
 version = "0.5.1"
 dependencies = [
+ "ariadne",
  "comemo",
  "console_error_panic_hook",
  "fast_image_resize",
  "js-sys",
  "serde",
  "serde-wasm-bindgen",
- "siphasher",
  "typst",
  "typst-library",
  "wasm-bindgen",
@@ -1927,6 +1937,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1d386ff53b415b7fe27b50bb44679e2cc4660272694b7b6f3326d8480823a94"
 
 [[package]]
+name = "unicode-width"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0edd1e5b14653f783770bce4a4dabb4a5108a5370a5f5d8cfe8710c361f6c8b"
+
+[[package]]
 name = "unicode-xid"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2191,6 +2207,12 @@ checksum = "56c1936c4cc7a1c9ab21a1ebb602eb942ba868cbd44a99cb7cdc5892335e1c85"
 dependencies = [
  "linked-hash-map",
 ]
+
+[[package]]
+name = "yansi"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09041cd90cf85f7f8b2df60c646f853b7f535ce68f85244eb6731cf89fa498ec"
 
 [[package]]
 name = "yoke"

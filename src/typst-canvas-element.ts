@@ -65,7 +65,10 @@ export default class TypstCanvasElement extends HTMLCanvasElement {
                         await TypstCanvasElement.compile(this.path, this.source, this.size, this.display, fontSize)
                 } catch (error) {
                     console.error(error);
-                    this.outerText = error
+                    let pre = createEl("pre")//"<pre> </pre>"
+                    pre.textContent = error
+                    this.outerHTML = pre.outerHTML
+                    // this.innerText = error
                     return
                 }
 

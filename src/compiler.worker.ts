@@ -2,7 +2,8 @@
 import wasmBin from '../pkg/obsidian_typst_bg.wasm'
 import * as typst from '../pkg'
 
-import { CompileCommand, WorkerRequest } from "src/types";
+
+import { CompileCommand } from "src/types";
 
 typst.initSync(wasmBin);
 
