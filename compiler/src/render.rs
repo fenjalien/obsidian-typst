@@ -1,6 +1,6 @@
-use std::{collections::HashMap, num::NonZeroU32, str::FromStr, cell::Ref};
+use std::{cell::Ref, collections::HashMap, num::NonZeroU32, str::FromStr};
 
-use ariadne::{Config, FnCache, Label, Report, ReportKind, Source, Span};
+use ariadne::{Cache, Config, Fmt, FnCache, Label, Report, ReportKind, Source};
 // use ariadne::{Report, ReportKind};
 use fast_image_resize as fr;
 use fr::Resizer;
@@ -11,7 +11,7 @@ use typst::{
     syntax::FileId,
 };
 use wasm_bindgen::Clamped;
-use web_sys::ImageData;
+use web_sys::{console, ImageData};
 
 use crate::file_entry::FileEntry;
 
@@ -76,42 +76,51 @@ pub fn to_image(
     );
 }
 
-// impl Into<()> for FileId {
-
-// }
-
 pub fn format_diagnostic(
     sources: Ref<HashMap<FileId, FileEntry>>,
     diagnostics: &[SourceDiagnostic],
 ) -> String {
+    let config = Config::default().with_color(false).with_tab_width(2);
     let mut bytes = Vec::new();
 
-    let cache = FnCache::new(|id| {
-        return sources.get(&id);
-    });
+    let mut cache = FnCache::new(|id: &_| Ok(sources.get(id).unwrap().source().text().to_string()));
 
     for diagnostic in diagnostics {
         let id = diagnostic.span.id();
         let source = sources.get(&id).unwrap().source();
         let range = source.range(diagnostic.span);
-        let report = Report::build(
+        let mut report = Report::build(
             match diagnostic.severity {
                 Severity::Error => ReportKind::Error,
                 Severity::Warning => ReportKind::Warning,
             },
-            "arst",
-            // id.path().to_str().unwrap(),
+            id,
             range.start,
         )
-        .with_config(Config::default().with_color(false).with_tab_width(2))
+        .with_config(config)
         .with_message(&diagnostic.message)
-        .with_label(Label::new(range))
-        .finish();
-        report
-            .write(Source::from(source.text()), &mut bytes)
-            .unwrap();
+        .with_label(Label::new((id, range)));
+        if !diagnostic.hints.is_empty() {
+            report.set_help(diagnostic.hints.join("\n"))
+        }
+        report.finish().write(&mut cache, &mut bytes).unwrap();
+
         bytes.push(b'\n');
+        for point in &diagnostic.trace {
+            let id = point.span.id();
+            let source = sources.get(&id).unwrap().source();
+            let range = source.range(point.span);
+
+            Report::build(ReportKind::Advice, id, range.start)
+                .with_config(config)
+                .with_message(point.v.to_string())
+                .with_label(Label::new((id, range)))
+                .finish()
+                .write(&mut cache, &mut bytes)
+                .unwrap();
+            bytes.push(b'\n');
+        }
     }
 
-    return String::from_utf8(bytes).unwrap();
+    return String::from_utf8(bytes).unwrap().trim().to_string();
 }
