@@ -3,10 +3,11 @@ import { App, renderMath, HexString, Platform, Plugin, PluginSettingTab, Setting
 // @ts-ignore
 import CompilerWorker from "./compiler.worker.ts"
 
-import TypstCanvasElement from './typst-canvas-element';
+import TypstRenderElement from './typst-render-element.js';
 import { WorkerRequest } from './types';
 
 interface TypstPluginSettings {
+    format: string,
     noFill: boolean,
     fill: HexString,
     pixel_per_pt: number,
@@ -21,6 +22,7 @@ interface TypstPluginSettings {
 }
 
 const DEFAULT_SETTINGS: TypstPluginSettings = {
+    format: "image",
     noFill: true,
     fill: "#ffffff",
     pixel_per_pt: 3,
@@ -66,9 +68,9 @@ export default class TypstPlugin extends Plugin {
         this.compilerWorker.postMessage(fonts, fonts)
 
         // Setup cutom canvas
-        TypstCanvasElement.compile = (a, b, c, d, e) => this.processThenCompileTypst(a, b, c, d, e)
+        TypstRenderElement.compile = (a, b, c, d, e) => this.processThenCompileTypst(a, b, c, d, e)
         if (customElements.get("typst-renderer") == undefined) {
-            customElements.define("typst-renderer", TypstCanvasElement, { extends: "canvas" })
+            customElements.define("typst-renderer", TypstRenderElement)
         }
 
         // Setup MathJax
@@ -89,7 +91,7 @@ export default class TypstPlugin extends Plugin {
 
         // Code blocks
         this.registerMarkdownCodeBlockProcessor("typst", async (source, el, ctx) => {
-            el.appendChild(this.createTypstCanvas("/" + ctx.sourcePath, `${this.settings.preamable.code}\n${source}`, true, false))
+            el.appendChild(this.createTypstRenderElement("/" + ctx.sourcePath, `${this.settings.preamable.code}\n${source}`, true, false))
         })
 
 
@@ -99,16 +101,25 @@ export default class TypstPlugin extends Plugin {
 
     async compileToTypst(path: string, source: string, size: number, display: boolean): Promise<ImageData> {
         return await navigator.locks.request("typst renderer compiler", async (lock) => {
-            this.compilerWorker.postMessage({
-                source,
-                path,
-                pixel_per_pt: this.settings.pixel_per_pt,
-                fill: `${this.settings.fill}${this.settings.noFill ? "00" : "ff"}`,
-                size,
-                display
-            });
+            if (this.settings.format == "svg") {
+                this.compilerWorker.postMessage({
+                    format: "svg",
+                    path,
+                    source
+                })
+            } else if (this.settings.format == "image") {
+                this.compilerWorker.postMessage({
+                    format: "image",
+                    source,
+                    path,
+                    pixel_per_pt: this.settings.pixel_per_pt,
+                    fill: `${this.settings.fill}${this.settings.noFill ? "00" : "ff"}`,
+                    size,
+                    display
+                });
+            }
             while (true) {
-                let result: ImageData | WorkerRequest = await new Promise((resolve, reject) => {
+                let result: ImageData | string | WorkerRequest = await new Promise((resolve, reject) => {
                     const listener = (ev: MessageEvent<ImageData>) => {
                         remove();
                         resolve(ev.data);
@@ -125,7 +136,7 @@ export default class TypstPlugin extends Plugin {
                     this.compilerWorker.addEventListener("error", errorListener);
                 })
 
-                if (result instanceof ImageData) {
+                if (result instanceof ImageData || typeof result == "string") {
                     return result
                 }
                 // Cannot reach this point when in mobile app as the worker should
@@ -143,8 +154,6 @@ export default class TypstPlugin extends Plugin {
                     : this.getFileString(path)
             );
             if (s) {
-
-
                 let buffer = Int32Array.from(this.textEncoder.encode(
                     s
                 ));
@@ -231,20 +240,21 @@ export default class TypstPlugin extends Plugin {
         )
     }
 
-    createTypstCanvas(path: string, source: string, display: boolean, math: boolean) {
-        let canvas = new TypstCanvasElement();
-        canvas.source = source
-        canvas.path = path
-        canvas.display = display
-        canvas.math = math
-        return canvas
+    createTypstRenderElement(path: string, source: string, display: boolean, math: boolean) {
+        let renderer = new TypstRenderElement();
+        renderer.format = this.settings.format
+        renderer.source = source
+        renderer.path = path
+        renderer.display = display
+        renderer.math = math
+        return renderer
     }
 
     createTypstMath(source: string, r: { display: boolean }) {
         const display = r.display;
         source = `${this.settings.preamable.math}\n${display ? `$ ${source} $` : `$${source}$`}`
 
-        return this.createTypstCanvas("/586f8912-f3a8-4455-8a4a-3729469c2cc1.typ", source, display, true)
+        return this.createTypstRenderElement("/586f8912-f3a8-4455-8a4a-3729469c2cc1.typ", source, display, true)
     }
 
     onunload() {
@@ -288,9 +298,34 @@ class TypstSettingTab extends PluginSettingTab {
 
         containerEl.empty();
 
-
         new Setting(containerEl)
+            .setName("Render Format")
+            .addDropdown(dropdown => {
+                dropdown.addOptions({
+                    svg: "SVG",
+                    image: "Image"
+                })
+                    .setValue(this.plugin.settings.format)
+                    .onChange(async value => {
+                        this.plugin.settings.format = value;
+                        await this.plugin.saveSettings();
+                        if (value == "svg") {
+                            no_fill.setDisabled(true)
+                            fill_color.setDisabled(true)
+                            pixel_per_pt.setDisabled(true)
+                        } else {
+                            no_fill.setDisabled(false)
+                            fill_color.setDisabled(this.plugin.settings.noFill)
+                            pixel_per_pt.setDisabled(false)
+                        }
+                    })
+            })
+
+
+
+        let no_fill = new Setting(containerEl)
             .setName("No Fill (Transparent)")
+            .setDisabled(this.plugin.settings.format == "svg")
             .addToggle((toggle) => {
                 toggle.setValue(this.plugin.settings.noFill)
                     .onChange(
@@ -304,7 +339,7 @@ class TypstSettingTab extends PluginSettingTab {
 
         let fill_color = new Setting(containerEl)
             .setName("Fill Color")
-            .setDisabled(this.plugin.settings.noFill)
+            .setDisabled(this.plugin.settings.noFill || this.plugin.settings.format == "svg")
             .addColorPicker((picker) => {
                 picker.setValue(this.plugin.settings.fill)
                     .onChange(
@@ -315,8 +350,9 @@ class TypstSettingTab extends PluginSettingTab {
                     )
             })
 
-        new Setting(containerEl)
+        let pixel_per_pt = new Setting(containerEl)
             .setName("Pixel Per Point")
+            .setDisabled(this.plugin.settings.format == "svg")
             .addSlider((slider) =>
                 slider.setValue(this.plugin.settings.pixel_per_pt)
                     .setLimits(1, 5, 1)
@@ -381,7 +417,7 @@ class TypstSettingTab extends PluginSettingTab {
         fontTagsDiv.innerHTML = ''
         this.plugin.settings.font_families.forEach((fontFamily) => {
             const fontTag = fontTagsDiv.createEl('span', { cls: "font-tag" })
-            fontTag.createEl('span', { text: fontFamily, cls: "font-tag-text" })
+            fontTag.createEl('span', { text: fontFamily, cls: "font-tag-text", attr: { style: `font-family: ${fontFamily};` } })
             const removeBtn = fontTag.createEl('span', { text: "x", cls: "tag-btn" })
             removeBtn.addEventListener('click', async () => {
                 this.plugin.settings.font_families.remove(fontFamily)

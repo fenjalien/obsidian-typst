@@ -7,7 +7,8 @@ use std::{
     path::{Path, PathBuf},
 };
 use typst::{
-    diag::{EcoString, FileError, FileResult, PackageError, PackageResult},
+    diag::{FileError, FileResult, PackageError, PackageResult},
+    doc::Document,
     eval::{Bytes, Datetime, Library, Tracer},
     font::{Font, FontBook},
     syntax::Source,
@@ -71,9 +72,8 @@ impl SystemWorld {
         }
     }
 
-    pub fn compile(
+    pub fn compile_image(
         &mut self,
-        // command: CompileCommand,
         text: String,
         path: String,
         pixel_per_pt: f32,
@@ -81,27 +81,32 @@ impl SystemWorld {
         size: u32,
         display: bool,
     ) -> Result<ImageData, JsValue> {
+        let document = self.compile(text, path)?;
+        render::to_image(
+            &mut self.resizer,
+            document,
+            fill,
+            pixel_per_pt,
+            size,
+            display,
+        )
+    }
+
+    pub fn compile_svg(&mut self, text: String, path: String) -> Result<String, JsValue> {
+        self.compile(text, path)
+            .map(|document| render::to_svg(document))
+    }
+
+    fn compile(&mut self, text: String, path: String) -> Result<Document, JsValue> {
         self.reset();
 
         self.main = FileId::new(None, &PathBuf::from(&path));
-        self.files.borrow_mut().insert(
-            self.main,
-            FileEntry::new(self.main, text), //     bytes: OnceCell::new(),
-                                             //     source: Source::new(self.main, text),
-                                             // },
-        );
+        self.files
+            .borrow_mut()
+            .insert(self.main, FileEntry::new(self.main, text));
         let mut tracer = Tracer::default();
-        match typst::compile(self, &mut tracer) {
-            Ok(document) => render::to_image(
-                &mut self.resizer,
-                document,
-                fill,
-                pixel_per_pt,
-                size,
-                display,
-            ),
-            Err(errors) => Err(format_diagnostic(self.files.borrow(), &errors).into()),
-        }
+        typst::compile(self, &mut tracer)
+            .map_err(|errors| format_diagnostic(self.files.borrow(), &errors).into())
     }
 
     pub fn add_font(&mut self, data: Vec<u8>) {

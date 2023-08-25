@@ -3,7 +3,7 @@ import wasmBin from '../pkg/obsidian_typst_bg.wasm'
 import * as typst from '../pkg'
 
 
-import { CompileCommand } from "src/types";
+import { CompileImageCommand, CompileSvgCommand } from "src/types";
 
 typst.initSync(wasmBin);
 
@@ -29,14 +29,18 @@ function requestData(path: string): string {
 
 const compiler = new typst.SystemWorld("", requestData)
 
-onmessage = (ev: MessageEvent<CompileCommand | true>) => {
+onmessage = (ev: MessageEvent<CompileImageCommand | CompileSvgCommand | true>) => {
     if (ev.data == true) {
         canUseSharedArrayBuffer = ev.data
     } else if (ev.data instanceof Array) {
         ev.data.forEach(font => compiler.add_font(new Uint8Array(font)))
-    } else if ("source" in ev.data) {
-        const data: CompileCommand = ev.data;
-        postMessage(compiler.compile(data.source, data.path, data.pixel_per_pt, data.fill, data.size, data.display))
+    } else if ("format" in ev.data) {
+        if (ev.data.format == "image") {
+            const data: CompileImageCommand = ev.data;
+            postMessage(compiler.compile_image(data.source, data.path, data.pixel_per_pt, data.fill, data.size, data.display))
+        } else if (ev.data.format == "svg") {
+            postMessage(compiler.compile_svg(ev.data.source, ev.data.path))
+        }
 
         // postMessage(compile(ev.data))
     } else {

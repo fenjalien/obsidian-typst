@@ -1,7 +1,6 @@
 use std::{cell::Ref, collections::HashMap, num::NonZeroU32, str::FromStr};
 
-use ariadne::{Cache, Config, Fmt, FnCache, Label, Report, ReportKind, Source};
-// use ariadne::{Report, ReportKind};
+use ariadne::{Config, FnCache, Label, Report, ReportKind};
 use fast_image_resize as fr;
 use fr::Resizer;
 use typst::{
@@ -11,7 +10,7 @@ use typst::{
     syntax::FileId,
 };
 use wasm_bindgen::Clamped;
-use web_sys::{console, ImageData};
+use web_sys::ImageData;
 
 use crate::file_entry::FileEntry;
 
@@ -74,6 +73,10 @@ pub fn to_image(
         dst_width.get(),
         dst_height.get(),
     );
+}
+
+pub fn to_svg(document: Document) -> String {
+    typst::export::svg(&document.pages[0])
 }
 
 pub fn format_diagnostic(
