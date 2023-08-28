@@ -53,3 +53,7 @@ button,
 .tag-btn:hover {
     color: var(--interactive-accent);
 }
+
+.typst-doc {
+    vertical-align: bottom;
+}

@@ -1,5 +1,6 @@
 import { App, renderMath, HexString, Platform, Plugin, PluginSettingTab, Setting, loadMathJax, normalizePath } from 'obsidian';
 
+
 // @ts-ignore
 import CompilerWorker from "./compiler.worker.ts"
 
@@ -230,7 +231,8 @@ export default class TypstPlugin extends Plugin {
 
     async processThenCompileTypst(path: string, source: string, size: number, display: boolean, fontSize: number) {
         const dpr = window.devicePixelRatio;
-        const pxToPt = (px: number) => (px * dpr * (72 / 96)).toString() + "pt"
+        // * (72 / 96)
+        const pxToPt = (px: number) => (px * dpr).toString() + "pt"
         const sizing = `#let (WIDTH, HEIGHT, SIZE) = (${display ? pxToPt(size) : "auto"}, ${!display ? pxToPt(size) : "auto"}, ${pxToPt(fontSize)})`
         return this.compileToTypst(
             path,

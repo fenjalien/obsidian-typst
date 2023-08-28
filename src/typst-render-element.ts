@@ -1,9 +1,15 @@
+import { optimize } from 'svgo';
+
 export default class TypstRenderElement extends HTMLElement {
     static compile: (path: string, source: string, size: number, display: boolean, fontSize: number) => Promise<ImageData | string>;
     static nextId = 0;
     static prevHeight = 0;
 
+    // The Element's Id
     id: string
+    // The number in the element's id.
+    num: string
+
     abortController: AbortController
     format: string
     source: string
@@ -28,11 +34,12 @@ export default class TypstRenderElement extends HTMLElement {
         if (this.format == "image") {
             console.log("got a canvas");
 
-            this.canvas = this.appendChild(createEl("canvas", { attr: { height: TypstRenderElement.prevHeight } }))
+            this.canvas = this.appendChild(createEl("canvas", { attr: { height: TypstRenderElement.prevHeight }, cls: "typst-doc" }))
         }
 
-        this.id = "TypstRenderElement-" + TypstRenderElement.nextId.toString()
+        this.num = TypstRenderElement.nextId.toString()
         TypstRenderElement.nextId += 1
+        this.id = "TypstRenderElement-" + this.num
         this.abortController = new AbortController()
 
         if (this.display) {
@@ -77,7 +84,17 @@ export default class TypstRenderElement extends HTMLElement {
                     if (result instanceof ImageData && this.format == "image") {
                         this.drawToCanvas(result)
                     } else if (typeof result == "string" && this.format == "svg") {
-                        this.innerHTML = result
+                        this.innerHTML = optimize(result, {
+                            plugins: [
+                                {
+                                    name: "prefixIds",
+                                    params: {
+                                        prefix: this.num,
+                                        prefixClassNames: false,
+                                    }
+                                }
+                            ]
+                        }).data;
                     }
                 } catch (error) {
                     // For some reason it is uncaught so remove "Uncaught "
@@ -103,13 +120,13 @@ export default class TypstRenderElement extends HTMLElement {
 
     drawToCanvas(image: ImageData) {
         let ctx = this.canvas.getContext("2d")!;
-        if (this.display) {
-            this.style.width = "100%"
-            this.style.height = ""
-        } else {
-            this.style.verticalAlign = "bottom"
-            this.style.height = `${this.size}px`
-        }
+        // if (this.display) {
+        //     this.style.width = "100%"
+        //     this.style.height = ""
+        // } else {
+        //     this.style.verticalAlign = "bottom"
+        //     this.style.height = `${this.size}px`
+        // }
         this.canvas.width = image.width
         this.canvas.height = image.height
 

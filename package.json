@@ -27,6 +27,7 @@
 	"dependencies": {
 		"obsidian": "latest",
 		"obsidian-typst": "file:pkg",
+		"svgo": "^3.0.2",
 		"tslib": "^2"
 	}
 }
