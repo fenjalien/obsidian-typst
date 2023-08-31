@@ -3,10 +3,9 @@
 Renders `typst` code blocks, and optionally math blocks, into images using [Typst](https://github.com/typst/typst) through the power of WASM! This is still very much in development, so suggestions and bugs are welcome!
 
 ## Small Things to NOTE
-- This plugin uses Typst 0.6.0
-- Typst does not currently support exporting to HTML only PDFs and PNGs. So due to image scaling, the rendered views may look a bit terrible. If you know how to fix this PLEASE HELP.
+- This plugin uses Typst 0.7.0
+- Typst does not currently support exporting to HTML only PDFs, PNGs and SVGs. So due to image scaling, the rendered views may look a bit terrible. If you know how to fix this PLEASE HELP.
 - File paths should be relative to the vault folder.
-- System fonts are not loaded by default as this takes about 20 seconds (on my machine). There is an option in settings to enable them (requires a reload of the plugin).
 - You can not import on mobile as file reading is NOT supported on mobile, this is due to `SharedArrayBuffer`s not being available on mobile but is available for some reason on desktop.
 
 ## Using Packages
@@ -26,6 +25,37 @@ Preambles are prepended to your `typst` code before compiling. There are three d
 - `shared`: Prepended to all `typst` code.
 - `math`: Prepended to `typst` code only in math blocks.
 - `code`: Prepended to `typst` code only in code blocks.
+
+The following variables are defined for you in all preambles to help style the output correctly:
+- `WIDTH`: The horizontal size of the space the output will be placed in. Can be a `length` or `auto` if the space is not limited in that direction.
+- `HEIGHT`: The vertical size of the space the output will be placed in. Can be a `length` or `auto` if the space is not limited in that direction.
+- `SIZE`: The font size as defined by the CSS property `"--font-text-size"`
+- `THEME`: A string defining the current theme of Obsidian. Either "light" or "dark".
+
+The following are the default preambles, I highly recommend you check this on each update to make sure you don't miss any changes that could break things. That being said you don't need them they are merely recommended.
+<details>
+<summary>Shared</summary>
+
+```
+#set text(fill: white, size: SIZE)
+#set page(width: WIDTH, height: HEIGHT)
+```
+</details>
+<details>
+<summary>Math</summary>
+
+```
+#set page(margin: 0pt)
+#set align(horizon)
+```
+</details>
+<details>
+<summary>Code</summary>
+
+```
+#set page(margin: (y: 1em, x: 0pt))
+```
+</details>
 
 ## Known Issues
 ### Runtime Error Unreachable or Recursive Use Of Object
@@ -74,8 +104,8 @@ Install it by copying `main.js`, `styles.css`, and `manifest.json` from the rele
 - [x] Better font loading
 - [x] Fix importing
 - [x] Fix Github Actions
-- [ ] Better error handling
-- [x]? Fix output image scaling
+- [x] Better error handling
+- [x] ? Fix output image scaling
 - [ ] Use HTML output
 - [x] Override default equation rendering
 - [ ] Custom editor for `.typ` files
