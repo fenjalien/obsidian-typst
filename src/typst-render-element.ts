@@ -32,8 +32,6 @@ export default class TypstRenderElement extends HTMLElement {
         // }
 
         if (this.format == "image") {
-            console.log("got a canvas");
-
             this.canvas = this.appendChild(createEl("canvas", { attr: { height: TypstRenderElement.prevHeight }, cls: "typst-doc" }))
         }
 
@@ -73,12 +71,10 @@ export default class TypstRenderElement extends HTMLElement {
 
                 // resizeObserver can trigger before the element gets disconnected which can cause the size to be 0
                 // which causes a NaN. size can also sometimes be -ve so wait for resize to draw it again
-                if (this.size <= 0) {
-
+                if (!(this.size > 0)) {
                     return;
                 }
 
-                let image: ImageData;
                 try {
                     let result = await TypstRenderElement.compile(this.path, this.source, this.size, this.display, fontSize)
                     if (result instanceof ImageData && this.format == "image") {
@@ -95,6 +91,7 @@ export default class TypstRenderElement extends HTMLElement {
                                 }
                             ]
                         }).data;
+                        (this.firstElementChild as SVGElement).setAttribute(this.display ? "width" : "height", this.size.toString())
                     }
                 } catch (error) {
                     // For some reason it is uncaught so remove "Uncaught "

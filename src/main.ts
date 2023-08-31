@@ -232,8 +232,8 @@ export default class TypstPlugin extends Plugin {
     async processThenCompileTypst(path: string, source: string, size: number, display: boolean, fontSize: number) {
         const dpr = window.devicePixelRatio;
         // * (72 / 96)
-        const pxToPt = (px: number) => (px * dpr).toString() + "pt"
-        const sizing = `#let (WIDTH, HEIGHT, SIZE) = (${display ? pxToPt(size) : "auto"}, ${!display ? pxToPt(size) : "auto"}, ${pxToPt(fontSize)})`
+        const pxToPt = (px: number) => px.toString() + "pt"
+        const sizing = `#let (WIDTH, HEIGHT, SIZE, THEME) = (${display ? pxToPt(size) : "auto"}, ${!display ? pxToPt(size) : "auto"}, ${pxToPt(fontSize * dpr)}, "${document.body.getCssPropertyValue("color-scheme")}")`
         return this.compileToTypst(
             path,
             `${sizing}\n${this.settings.preamable.shared}\n${source}`,
