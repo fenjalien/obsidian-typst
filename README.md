@@ -3,10 +3,18 @@
 Renders `typst` code blocks, and optionally math blocks, into images using [Typst](https://github.com/typst/typst) through the power of WASM! This is still very much in development, so suggestions and bugs are welcome!
 
 ## Small Things to NOTE
-- This plugin uses Typst 0.7.0
 - Typst does not currently support exporting to HTML only PDFs, PNGs and SVGs. So due to image scaling, the rendered views may look a bit terrible. If you know how to fix this PLEASE HELP.
 - File paths should be relative to the vault folder.
 - You can not import on mobile as file reading is NOT supported on mobile, this is due to `SharedArrayBuffer`s not being available on mobile but is available for some reason on desktop.
+
+## Versions
+
+| Plugin | Typst |
+|-|-|
+| 0.6 | [522708b](https://github.com/typst/typst/commit/522708b9df0b9b2f8265938aa1f0aeda8e6e6c1f) (Some commits after 0.7.0 to include SVG export) |
+| 0.5 | 0.6.0 |
+| 0.4 | 0.3.0 |
+| 0.3 | 0.2.0 |
 
 ## Using Packages
 The plugin supports only the reading of packages from the [`@preview`](https://github.com/typst/packages#downloads) and [`@local`](https://github.com/typst/packages#local-packages) namespaces. Please use the Typst cli to download your desired packages. This means the plugin accesses files outside of your vault but only to read them, it does not modify or create files outside of your vault.

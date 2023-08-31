@@ -6,6 +6,7 @@
 - Change output scaling/styling
 - Selected fonts are now written in their fonts
 - Fix ([#12](https://github.com/fenjalien/obsidian-typst/issues/12))
+- [#18](https://github.com/fenjalien/obsidian-typst/pull/18)
 
 # 0.5.1
 
