@@ -31,7 +31,7 @@ export default class TypstRenderElement extends HTMLElement {
         // this.style.height = TypstRenderElement.prevHeight;
         // }
 
-        if (this.format == "image") {
+        if (this.format == "image" && this.canvas == undefined) {
             this.canvas = this.appendChild(createEl("canvas", { attr: { height: TypstRenderElement.prevHeight }, cls: "typst-doc" }))
         }
 
