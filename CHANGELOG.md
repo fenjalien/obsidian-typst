@@ -1,3 +1,6 @@
+# 0.7.0
+- Update to Typst v0.8.0
+
 # 0.6.0
 - Improve error reporting
 - Upgrade to Typst 0.7.0

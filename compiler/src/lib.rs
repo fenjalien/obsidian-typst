@@ -1,6 +1,6 @@
+use chrono::{DateTime, Datelike, Local};
 use comemo::Prehashed;
 use fast_image_resize as fr;
-use render::format_diagnostic;
 use std::{
     cell::{OnceCell, RefCell, RefMut},
     collections::HashMap,
@@ -12,17 +12,19 @@ use typst::{
     eval::{Bytes, Datetime, Library, Tracer},
     font::{Font, FontBook},
     syntax::Source,
-    syntax::{FileId, PackageSpec},
-    util::PathExt,
+    syntax::{FileId, PackageSpec, VirtualPath},
+    // util::PathExt,
     World,
 };
+use typst_library::prelude::EcoString;
 use wasm_bindgen::prelude::*;
 use web_sys::ImageData;
 
+mod diagnostic;
 mod file_entry;
 mod render;
 
-use crate::file_entry::FileEntry;
+use crate::{diagnostic::format_diagnostic, file_entry::FileEntry};
 
 /// A world that provides access to the operating system.
 #[wasm_bindgen]
@@ -39,9 +41,8 @@ pub struct SystemWorld {
     fonts: Vec<Font>,
 
     files: RefCell<HashMap<FileId, FileEntry>>,
-    /// The current date if requested. This is stored here to ensure it is
-    /// always the same within one compilation. Reset between compilations.
-    today: OnceCell<Option<Datetime>>,
+
+    now: OnceCell<DateTime<Local>>,
 
     packages: RefCell<HashMap<PackageSpec, PackageResult<PathBuf>>>,
 
@@ -60,12 +61,12 @@ impl SystemWorld {
 
         Self {
             root: PathBuf::from(root),
-            main: FileId::detached(),
+            main: FileId::new(None, VirtualPath::new("")),
             library: Prehashed::new(typst_library::build()),
             book: Prehashed::new(book),
             fonts,
             files: RefCell::default(),
-            today: OnceCell::new(),
+            now: OnceCell::new(),
             packages: RefCell::default(),
             resizer: fr::Resizer::default(),
             js_request_data: js_read_file.clone(),
@@ -100,7 +101,7 @@ impl SystemWorld {
     fn compile(&mut self, text: String, path: String) -> Result<Document, JsValue> {
         self.reset();
 
-        self.main = FileId::new(None, &PathBuf::from(&path));
+        self.main = FileId::new(None, VirtualPath::new(path));
         self.files
             .borrow_mut()
             .insert(self.main, FileEntry::new(self.main, text));
@@ -151,19 +152,30 @@ impl World for SystemWorld {
         Some(self.fonts[index].clone())
     }
 
-    fn today(&self, _: Option<i64>) -> Option<Datetime> {
-        None
+    fn today(&self, offset: Option<i64>) -> Option<Datetime> {
+        let now = self.now.get_or_init(chrono::Local::now);
+
+        let naive = match offset {
+            None => now.naive_local(),
+            Some(o) => now.naive_utc() + chrono::Duration::hours(o),
+        };
+
+        Datetime::from_ymd(
+            naive.year(),
+            naive.month().try_into().ok()?,
+            naive.day().try_into().ok()?,
+        )
     }
 }
 
 impl SystemWorld {
     fn reset(&mut self) {
         self.files.borrow_mut().clear();
-        self.today.take();
+        self.now.take();
     }
 
     fn read_file(&self, path: &Path) -> FileResult<String> {
-        let f = |_e: JsValue| FileError::Other;
+        let f = |e: JsValue| FileError::Other(e.as_string().map(EcoString::from));
         Ok(self
             .js_request_data
             .call1(&JsValue::NULL, &path.to_str().unwrap().into())
@@ -179,7 +191,7 @@ impl SystemWorld {
                     return PackageError::NotFound(spec.clone());
                 }
             }
-            PackageError::Other
+            PackageError::Other(e.as_string().map(EcoString::from))
         };
         self.packages
             .borrow_mut()
@@ -207,10 +219,12 @@ impl SystemWorld {
         let path = match id.package() {
             Some(spec) => self.prepare_package(spec)?,
             None => self.root.clone(),
-        }
-        .join_rooted(id.path())
-        .ok_or(FileError::AccessDenied)?;
-        let text = self.read_file(&path)?;
+        };
+        // .
+        // .ok_or(FileError::AccessDenied)?;
+
+        let text = self.read_file(&id.vpath().resolve(&path).ok_or(FileError::AccessDenied)?)?;
+
         Ok(RefMut::map(self.files.borrow_mut(), |files| {
             return files.entry(id).or_insert(FileEntry::new(id, text));
         }))

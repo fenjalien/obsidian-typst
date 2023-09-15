@@ -12,8 +12,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # Everything to do with Typst
-typst = { git = "https://github.com/typst/typst.git", rev = "522708b" }
-typst-library = { git = "https://github.com/typst/typst.git", rev = "522708b" }
+typst = { git = "https://github.com/typst/typst.git", tag = "v0.8.0" }
+typst-library = { git = "https://github.com/typst/typst.git", tag = "v0.8.0" }
 comemo = "0.3"
 
 
@@ -22,7 +22,7 @@ wasm-bindgen = "^0.2"
 js-sys = "^0.3"
 wasm-bindgen-futures = "^0.4"
 serde = { version = "1", features = ["derive"] }
-serde-wasm-bindgen = "^0.5"
+serde-wasm-bindgen = "^0.6"
 web-sys = { version = "^0.3", features = [
     "console",
     "Window",
@@ -36,3 +36,4 @@ console_error_panic_hook = "0.1.7"
 fast_image_resize = "2.7.3"
 
 ariadne = "0.3.0"
+chrono = "0.4.30"

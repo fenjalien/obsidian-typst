@@ -1,18 +1,13 @@
-use std::{cell::Ref, collections::HashMap, num::NonZeroU32, str::FromStr};
+use std::{num::NonZeroU32, str::FromStr};
 
-use ariadne::{Config, FnCache, Label, Report, ReportKind};
 use fast_image_resize as fr;
 use fr::Resizer;
 use typst::{
-    diag::{Severity, SourceDiagnostic},
     doc::Document,
     geom::{Color, RgbaColor},
-    syntax::FileId,
 };
 use wasm_bindgen::Clamped;
 use web_sys::ImageData;
-
-use crate::file_entry::FileEntry;
 
 pub fn to_image(
     resizer: &mut Resizer,
@@ -77,53 +72,4 @@ pub fn to_image(
 
 pub fn to_svg(document: Document) -> String {
     typst::export::svg(&document.pages[0])
-}
-
-pub fn format_diagnostic(
-    sources: Ref<HashMap<FileId, FileEntry>>,
-    diagnostics: &[SourceDiagnostic],
-) -> String {
-    let config = Config::default().with_color(false).with_tab_width(2);
-    let mut bytes = Vec::new();
-
-    let mut cache = FnCache::new(|id: &_| Ok(sources.get(id).unwrap().source().text().to_string()));
-
-    for diagnostic in diagnostics {
-        let id = diagnostic.span.id();
-        let source = sources.get(&id).unwrap().source();
-        let range = source.range(diagnostic.span);
-        let mut report = Report::build(
-            match diagnostic.severity {
-                Severity::Error => ReportKind::Error,
-                Severity::Warning => ReportKind::Warning,
-            },
-            id,
-            range.start,
-        )
-        .with_config(config)
-        .with_message(&diagnostic.message)
-        .with_label(Label::new((id, range)));
-        if !diagnostic.hints.is_empty() {
-            report.set_help(diagnostic.hints.join("\n"))
-        }
-        report.finish().write(&mut cache, &mut bytes).unwrap();
-
-        bytes.push(b'\n');
-        for point in &diagnostic.trace {
-            let id = point.span.id();
-            let source = sources.get(&id).unwrap().source();
-            let range = source.range(point.span);
-
-            Report::build(ReportKind::Advice, id, range.start)
-                .with_config(config)
-                .with_message(point.v.to_string())
-                .with_label(Label::new((id, range)))
-                .finish()
-                .write(&mut cache, &mut bytes)
-                .unwrap();
-            bytes.push(b'\n');
-        }
-    }
-
-    return String::from_utf8(bytes).unwrap().trim().to_string();
 }
