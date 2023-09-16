@@ -49,24 +49,22 @@ export default class TypstPlugin extends Plugin {
     fs: any;
 
     async onload() {
+        this.textEncoder = new TextEncoder()
+        await this.loadSettings()
         this.compilerWorker = (new CompilerWorker() as Worker);
         if (!Platform.isMobileApp) {
             this.compilerWorker.postMessage(true);
             this.fs = require("fs")
+            let fonts = await Promise.all(
+                //@ts-expect-error
+                (await window.queryLocalFonts() as Array)
+                    .filter((font: { family: string; name: string; }) => this.settings.font_families.contains(font.family.toLowerCase()))
+                    .map(
+                        async (font: { blob: () => Promise<Blob>; }) => await (await font.blob()).arrayBuffer()
+                    )
+            )
+            this.compilerWorker.postMessage(fonts, fonts)
         }
-
-        this.textEncoder = new TextEncoder()
-        await this.loadSettings()
-
-        let fonts = await Promise.all(
-            //@ts-expect-error
-            (await window.queryLocalFonts() as Array)
-                .filter((font: { family: string; name: string; }) => this.settings.font_families.contains(font.family.toLowerCase()))
-                .map(
-                    async (font: { blob: () => Promise<Blob>; }) => await (await font.blob()).arrayBuffer()
-                )
-        )
-        this.compilerWorker.postMessage(fonts, fonts)
 
         // Setup cutom canvas
         TypstRenderElement.compile = (a, b, c, d, e) => this.processThenCompileTypst(a, b, c, d, e)
@@ -233,7 +231,7 @@ export default class TypstPlugin extends Plugin {
         const dpr = window.devicePixelRatio;
         // * (72 / 96)
         const pxToPt = (px: number) => px.toString() + "pt"
-        const sizing = `#let (WIDTH, HEIGHT, SIZE, THEME) = (${display ? pxToPt(size) : "auto"}, ${!display ? pxToPt(size) : "auto"}, ${pxToPt(fontSize * dpr)}, "${document.body.getCssPropertyValue("color-scheme")}")`
+        const sizing = `#let (WIDTH, HEIGHT, SIZE, THEME) = (${display ? pxToPt(size) : "auto"}, ${!display ? pxToPt(size) : "auto"}, ${pxToPt(fontSize)}, "${document.body.getCssPropertyValue("color-scheme")}")`
         return this.compileToTypst(
             path,
             `${sizing}\n${this.settings.preamable.shared}\n${source}`,
@@ -385,33 +383,36 @@ class TypstSettingTab extends PluginSettingTab {
             .addTextArea((c) => c.setValue(this.plugin.settings.preamable.math).onChange(async (value) => { this.plugin.settings.preamable.math = value; await this.plugin.saveSettings() }))
 
         //Font family settings
-        const fontSettings = containerEl.createDiv({ cls: "setting-item font-settings" })
-        fontSettings.createDiv({ text: "Fonts", cls: "setting-item-name" })
-        fontSettings.createDiv({ text: "Font family names that should be loaded for Typst from your system. Requires a reload on change.", cls: "setting-item-description" })
+        if (!Platform.isMobileApp) {
 
-        const addFontsDiv = fontSettings.createDiv({ cls: "add-fonts-div" })
-        const fontsInput = addFontsDiv.createEl('input', { type: "text", placeholder: "Enter a font family", cls: "font-input", })
-        const addFontBtn = addFontsDiv.createEl('button', { text: "Add" })
+            const fontSettings = containerEl.createDiv({ cls: "setting-item font-settings" })
+            fontSettings.createDiv({ text: "Fonts", cls: "setting-item-name" })
+            fontSettings.createDiv({ text: "Font family names that should be loaded for Typst from your system. Requires a reload on change.", cls: "setting-item-description" })
 
-        const fontTagsDiv = fontSettings.createDiv({ cls: "font-tags-div" })
+            const addFontsDiv = fontSettings.createDiv({ cls: "add-fonts-div" })
+            const fontsInput = addFontsDiv.createEl('input', { type: "text", placeholder: "Enter a font family", cls: "font-input", })
+            const addFontBtn = addFontsDiv.createEl('button', { text: "Add" })
 
-        const addFontTag = async () => {
-            if (!this.plugin.settings.font_families.contains(fontsInput.value)) {
-                this.plugin.settings.font_families.push(fontsInput.value.toLowerCase())
-                await this.plugin.saveSettings()
+            const fontTagsDiv = fontSettings.createDiv({ cls: "font-tags-div" })
+
+            const addFontTag = async () => {
+                if (!this.plugin.settings.font_families.contains(fontsInput.value)) {
+                    this.plugin.settings.font_families.push(fontsInput.value.toLowerCase())
+                    await this.plugin.saveSettings()
+                }
+                fontsInput.value = ''
+                this.renderFontTags(fontTagsDiv)
             }
-            fontsInput.value = ''
+
+            fontsInput.addEventListener('keydown', async (ev) => {
+                if (ev.key == "Enter") {
+                    addFontTag()
+                }
+            })
+            addFontBtn.addEventListener('click', async () => addFontTag())
+
             this.renderFontTags(fontTagsDiv)
         }
-
-        fontsInput.addEventListener('keydown', async (ev) => {
-            if (ev.key == "Enter") {
-                addFontTag()
-            }
-        })
-        addFontBtn.addEventListener('click', async () => addFontTag())
-
-        this.renderFontTags(fontTagsDiv)
     }
 
 

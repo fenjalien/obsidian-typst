@@ -1,4 +1,5 @@
-import { optimize } from 'svgo';
+//@ts-ignore
+import { optimize } from 'svgo/dist/svgo.browser.js';
 
 export default class TypstRenderElement extends HTMLElement {
     static compile: (path: string, source: string, size: number, display: boolean, fontSize: number) => Promise<ImageData | string>;
