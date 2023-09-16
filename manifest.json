@@ -6,5 +6,8 @@
 	"description": "Renders `typst` code blocks and math blocks with Typst.",
 	"author": "fenjalien",
 	"authorUrl": "https://github.com/fenjalien",
-	"fundingUrl": "https://github.com/sponsors/fenjalien"
+	"fundingUrl": {
+		"GitHub Sponsor": "https://github.com/sponsors/fenjalien",
+		"ko-fi": "https://ko-fi.com/fenjalien"
+	}
 }
