@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-typst-plugin",
-	"version": "0.6.0",
+	"version": "0.7.0",
 	"description": "Renders `typst` code blocks to images with Typst.",
 	"main": "main.js",
 	"scripts": {

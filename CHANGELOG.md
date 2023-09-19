@@ -1,5 +1,6 @@
 # 0.7.0
 - Update to Typst v0.8.0
+- Fix not loading on mobile
 
 # 0.6.0
 - Improve error reporting
