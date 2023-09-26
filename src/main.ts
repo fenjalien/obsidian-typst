@@ -185,12 +185,12 @@ export default class TypstPlugin extends Plugin {
         spec = spec.slice(1)
         let subdir = "/typst/packages/" + spec
 
-        let dir = normalizePath(this.getDataDir() + subdir)
+        let dir = require('path').normalize(this.getDataDir() + subdir)
         if (this.fs.existsSync(dir)) {
             return dir
         }
 
-        dir = normalizePath(this.getCacheDir() + subdir)
+        dir = require('path').normalize(this.getCacheDir() + subdir)
 
         if (this.fs.existsSync(dir)) {
             return dir
