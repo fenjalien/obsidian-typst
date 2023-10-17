@@ -1,3 +1,6 @@
+# 0.7.1
+- Fix wrong paths generated for `@local`/`@preview` packages [#30](https://github.com/fenjalien/obsidian-typst/pull/30)
+
 # 0.7.0
 - Update to Typst v0.8.0
 - Fix not loading on mobile

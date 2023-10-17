@@ -1,6 +1,6 @@
 [package]
 name = "obsidian-typst"
-version = "0.7.0"
+version = "0.7.1"
 authors = ["fenjalien"]
 edition = "2021"
 description = "Renders `typst` code blocks to images with Typst."
