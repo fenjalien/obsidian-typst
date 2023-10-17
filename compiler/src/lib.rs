@@ -201,7 +201,7 @@ impl SystemWorld {
                     .js_request_data
                     .call1(
                         &JsValue::NULL,
-                        &format!("@{}/{}-{}", spec.namespace, spec.name, spec.version).into(),
+                        &format!("@{}/{}/{}", spec.namespace, spec.name, spec.version).into(),
                     )
                     .map_err(f)?
                     .as_string()
