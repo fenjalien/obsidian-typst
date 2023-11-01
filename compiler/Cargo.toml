@@ -12,8 +12,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # Everything to do with Typst
-typst = { git = "https://github.com/typst/typst.git", tag = "v0.8.0" }
-typst-library = { git = "https://github.com/typst/typst.git", tag = "v0.8.0" }
+typst = { git = "https://github.com/typst/typst.git", tag = "v0.9.0" }
+typst-library = { git = "https://github.com/typst/typst.git", tag = "v0.9.0" }
 comemo = "0.3"
 
 

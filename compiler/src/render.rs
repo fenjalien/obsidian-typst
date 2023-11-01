@@ -4,7 +4,7 @@ use fast_image_resize as fr;
 use fr::Resizer;
 use typst::{
     doc::Document,
-    geom::{Color, RgbaColor},
+    geom::Color,
 };
 use wasm_bindgen::Clamped;
 use web_sys::ImageData;
@@ -20,7 +20,7 @@ pub fn to_image(
     let mut pixmap = typst::export::render(
         &document.pages[0],
         pixel_per_pt,
-        Color::Rgba(RgbaColor::from_str(&fill)?),
+        Color::from_str(&fill)?,
     );
 
     let width = pixmap.width();
