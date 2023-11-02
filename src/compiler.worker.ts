@@ -1,11 +1,11 @@
 //@ts-ignore
-import wasmBin from '../pkg/obsidian_typst_bg.wasm'
-import * as typst from '../pkg'
+// import wasmBin from '../pkg/obsidian_typst_bg.wasm'
+import typstInit, * as typst from '../pkg'
 
 
 import { CompileImageCommand, CompileSvgCommand } from "src/types";
 
-typst.initSync(wasmBin);
+// typst.initSync(wasmBin);
 
 let canUseSharedArrayBuffer = new Boolean(false);
 
@@ -27,11 +27,20 @@ function requestData(path: string): string {
     throw buffer[0]
 }
 
-const compiler = new typst.SystemWorld("", requestData)
+let compiler: typst.SystemWorld; //= new typst.SystemWorld("", requestData)
 
-onmessage = (ev: MessageEvent<CompileImageCommand | CompileSvgCommand | true>) => {
+// Receive data from main thread
+// `true` means a sharedarraybuffer can be used
+// `Array` is a list of fonts to be added to the compiler
+// `string` the url to the web assembly binary data
+onmessage = (ev: MessageEvent<CompileImageCommand | CompileSvgCommand | true | string>) => {
     if (ev.data == true) {
         canUseSharedArrayBuffer = ev.data
+    } else if (typeof ev.data == "string") {
+        typstInit(ev.data).then(_ => {
+            compiler = new typst.SystemWorld("", requestData)
+            console.log("Typst web assembly loaded!");
+        })
     } else if (ev.data instanceof Array) {
         ev.data.forEach(font => compiler.add_font(new Uint8Array(font)))
     } else if ("format" in ev.data) {
@@ -41,8 +50,6 @@ onmessage = (ev: MessageEvent<CompileImageCommand | CompileSvgCommand | true>) =
         } else if (ev.data.format == "svg") {
             postMessage(compiler.compile_svg(ev.data.source, ev.data.path))
         }
-
-        // postMessage(compile(ev.data))
     } else {
         throw ev;
     }

@@ -1,5 +1,7 @@
-import { App, renderMath, HexString, Platform, Plugin, PluginSettingTab, Setting, loadMathJax, normalizePath } from 'obsidian';
+import { App, renderMath, HexString, Platform, Plugin, PluginSettingTab, Setting, loadMathJax, normalizePath, Notice, requestUrl } from 'obsidian';
+import { CapacitorHttp } from '@capacitor/core';
 
+declare const PLUGIN_VERSION: string;
 
 // @ts-ignore
 import CompilerWorker from "./compiler.worker.ts"
@@ -19,7 +21,8 @@ interface TypstPluginSettings {
         shared: string,
         math: string,
         code: string,
-    }
+    },
+    plugin_version: string,
 }
 
 const DEFAULT_SETTINGS: TypstPluginSettings = {
@@ -34,7 +37,8 @@ const DEFAULT_SETTINGS: TypstPluginSettings = {
         shared: "#set text(fill: white, size: SIZE)\n#set page(width: WIDTH, height: HEIGHT)",
         math: "#set page(margin: 0pt)\n#set align(horizon)",
         code: "#set page(margin: (y: 1em, x: 0pt))"
-    }
+    },
+    plugin_version: PLUGIN_VERSION
 }
 
 export default class TypstPlugin extends Plugin {
@@ -47,11 +51,35 @@ export default class TypstPlugin extends Plugin {
     prevCanvasHeight: number = 0;
     textEncoder: TextEncoder
     fs: any;
+    wasmPath = ".obsidian/plugins/typst/obsidian_typst_compiler.wasm"
 
     async onload() {
+        console.log("loading Typst Renderer");
+        
         this.textEncoder = new TextEncoder()
         await this.loadSettings()
+
         this.compilerWorker = (new CompilerWorker() as Worker);
+
+        if (!await this.app.vault.adapter.exists(this.wasmPath) || this.settings.plugin_version != PLUGIN_VERSION) {
+            new Notice("Typst Renderer: Downloading required web assembly component!", 5000);
+            try {
+                await this.fetchWasm()
+                new Notice("Typst Renderer: Web assembly component downloaded!", 5000)
+            } catch (error) {
+                new Notice("Typst Renderer: Failed to fetch component: " + error, 0)
+                console.error("Typst Renderer: Failed to fetch component: " + error)
+            }
+        }
+        this.compilerWorker.postMessage(
+            URL.createObjectURL(
+                new Blob(
+                    [await this.app.vault.adapter.readBinary(this.wasmPath)],
+                    { type: "application/wasm" }
+                )
+            )
+        )
+
         if (!Platform.isMobileApp) {
             this.compilerWorker.postMessage(true);
             this.fs = require("fs")
@@ -97,6 +125,26 @@ export default class TypstPlugin extends Plugin {
         console.log("loaded Typst Renderer");
     }
 
+    async fetchWasm() {
+        let response
+        let data
+        response = requestUrl(`https://api.github.com/repos/fenjalien/obsidian-typst/releases/tags/${PLUGIN_VERSION}`)
+        data = await response.json
+        let asset = data.assets.find((a: any) => a.name == "obsidian_typst_compiler.wasm")
+        if (asset == undefined) {
+            throw "Could not find the correct file!"
+        }
+        
+        response = requestUrl({url: asset.url, headers: {"Accept": "application/octet-stream"}})
+        data = await response.arrayBuffer
+        await this.app.vault.adapter.writeBinary(
+            this.wasmPath, 
+            data
+        )
+
+        this.settings.plugin_version = PLUGIN_VERSION
+        await this.saveSettings()
+    }
 
     async compileToTypst(path: string, source: string, size: number, display: boolean): Promise<ImageData> {
         return await navigator.locks.request("typst renderer compiler", async (lock) => {
@@ -282,6 +330,7 @@ export default class TypstPlugin extends Plugin {
     async saveSettings() {
         await this.saveData(this.settings);
     }
+
 }
 
 class TypstSettingTab extends PluginSettingTab {

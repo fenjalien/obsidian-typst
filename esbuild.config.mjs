@@ -12,36 +12,6 @@ if you want to view the source, please visit the github repository of this plugi
 `;
 
 const prod = (process.argv[2] === "production");
-import * as fs from 'fs';
-import * as path from 'path';
-
-
-let wasmPlugin = {
-    name: 'wasm',
-    setup(build) {
-        //   let path = require('path')
-        //   let fs = require('fs')
-
-        // Resolve ".wasm" files to a path with a namespace
-        build.onResolve({ filter: /\.wasm$/ }, args => {
-            if (args.resolveDir === '') {
-                return // Ignore unresolvable paths
-            }
-            return {
-                path: path.isAbsolute(args.path) ? args.path : path.join(args.resolveDir, args.path),
-                namespace: 'wasm-binary',
-            }
-        })
-        // Virtual modules in the "wasm-binary" namespace contain the
-        // actual bytes of the WebAssembly file. This uses esbuild's
-        // built-in "binary" loader instead of manually embedding the
-        // binary data inside JavaScript code ourselves.
-        build.onLoad({ filter: /.*/, namespace: 'wasm-binary' }, async (args) => ({
-            contents: await fs.promises.readFile(args.path),
-            loader: 'binary',
-        }))
-    },
-}
 
 const context = await esbuild.context({
     banner: {
@@ -70,8 +40,11 @@ const context = await esbuild.context({
     sourcemap: prod ? false : "inline",
     treeShaking: true,
     outfile: "main.js",
+    define: {
+        PLUGIN_VERSION: JSON.stringify(process.env.npm_package_version)
+    },
     plugins: [
-        inlineWorkerPlugin({ format: "cjs", target: "es2018", plugins: [wasmPlugin] })
+        inlineWorkerPlugin({ format: "cjs", target: "es2018" })
     ]
 })
 

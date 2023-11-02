@@ -25,3 +25,5 @@ data.json
 # Added by cargo
 
 target
+
+*.wasm
