@@ -51,7 +51,7 @@ export default class TypstPlugin extends Plugin {
     prevCanvasHeight: number = 0;
     textEncoder: TextEncoder
     fs: any;
-    wasmPath = ".obsidian/plugins/typst/obsidian_typst_compiler.wasm"
+    wasmPath = ".obsidian/plugins/typst/obsidian_typst_bg.wasm"
 
     async onload() {
         console.log("loading Typst Renderer");
@@ -71,14 +71,16 @@ export default class TypstPlugin extends Plugin {
                 console.error("Typst Renderer: Failed to fetch component: " + error)
             }
         }
-        this.compilerWorker.postMessage(
-            URL.createObjectURL(
+        this.compilerWorker.postMessage({
+            wasm: URL.createObjectURL(
                 new Blob(
-                    [await this.app.vault.adapter.readBinary(this.wasmPath)],
-                    { type: "application/wasm" }
-                )
-            )
-        )
+                        [await this.app.vault.adapter.readBinary(this.wasmPath)],
+                        { type: "application/wasm" }
+                    )
+                ),
+            //@ts-ignore
+            basePath: this.app.vault.adapter.basePath
+        })
 
         if (!Platform.isMobileApp) {
             this.compilerWorker.postMessage(true);

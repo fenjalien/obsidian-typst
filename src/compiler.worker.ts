@@ -1,19 +1,23 @@
-//@ts-ignore
-// import wasmBin from '../pkg/obsidian_typst_bg.wasm'
 import typstInit, * as typst from '../pkg'
-
 
 import { CompileImageCommand, CompileSvgCommand } from "src/types";
 
-// typst.initSync(wasmBin);
-
-let canUseSharedArrayBuffer = new Boolean(false);
+let canUseSharedArrayBuffer = false;
 
 let decoder = new TextDecoder()
+let basePath: string;
+const xhr = new XMLHttpRequest()
 
 function requestData(path: string): string {
     if (!canUseSharedArrayBuffer) {
-        throw "Cannot read files on mobile"
+        path = "http://localhost/_capacitor_file_" + basePath + "/" + path
+        console.log(path);
+        xhr.open("GET", path, false)
+        xhr.send()
+        if (xhr.status != 200) {
+            throw "Failed loading file"
+        }
+        return xhr.responseText
     }
     // @ts-expect-error
     let buffer = new Int32Array(new SharedArrayBuffer(4, { maxByteLength: 1e8 }))
@@ -23,7 +27,7 @@ function requestData(path: string): string {
     if (buffer[0] == 0) {
         return decoder.decode(Uint8Array.from(buffer.slice(1)))
     }
-
+    
     throw buffer[0]
 }
 
@@ -33,16 +37,17 @@ let compiler: typst.SystemWorld; //= new typst.SystemWorld("", requestData)
 // `true` means a sharedarraybuffer can be used
 // `Array` is a list of fonts to be added to the compiler
 // `string` the url to the web assembly binary data
-onmessage = (ev: MessageEvent<CompileImageCommand | CompileSvgCommand | true | string>) => {
+onmessage = (ev: MessageEvent<CompileImageCommand | CompileSvgCommand | true | { wasm: string, basePath: string }>) => {
     if (ev.data == true) {
-        canUseSharedArrayBuffer = ev.data
-    } else if (typeof ev.data == "string") {
-        typstInit(ev.data).then(_ => {
+        canUseSharedArrayBuffer = true
+    } else if (ev.data instanceof Array) {
+        ev.data.forEach(font => compiler.add_font(new Uint8Array(font)))
+    } else if ("wasm" in ev.data) {
+        typstInit(ev.data.wasm).then(_ => {
             compiler = new typst.SystemWorld("", requestData)
             console.log("Typst web assembly loaded!");
         })
-    } else if (ev.data instanceof Array) {
-        ev.data.forEach(font => compiler.add_font(new Uint8Array(font)))
+        basePath = ev.data.basePath
     } else if ("format" in ev.data) {
         if (ev.data.format == "image") {
             const data: CompileImageCommand = ev.data;
