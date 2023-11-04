@@ -97,7 +97,6 @@ export default class TypstRenderElement extends HTMLElement {
                 } catch (error) {
                     // For some reason it is uncaught so remove "Uncaught "
                     error = error.slice(9)
-                    console.error(error);
                     let pre = createEl("pre", {
                         attr: {
                             style: "white-space: pre;"

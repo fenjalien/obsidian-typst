@@ -18,7 +18,7 @@ use typst::{
 };
 use typst_library::prelude::EcoString;
 use wasm_bindgen::prelude::*;
-use web_sys::{ImageData};
+use web_sys::ImageData;
 
 mod diagnostic;
 mod file_entry;
@@ -175,7 +175,17 @@ impl SystemWorld {
     }
 
     fn read_file(&self, path: &Path) -> FileResult<String> {
-        let f = |e: JsValue| FileError::Other(e.as_string().map(EcoString::from));
+        let f = |e: JsValue| {
+            if let Some(value) = e.as_f64() {
+                return match value as i64 {
+                    2 => FileError::NotFound(path.to_path_buf()),
+                    3 => FileError::AccessDenied,
+                    4 => FileError::IsDirectory,
+                    _ => FileError::Other(Some(EcoString::from("see console for details"))),
+                };
+            }
+            FileError::Other(e.as_string().map(EcoString::from))
+        };
         Ok(self
             .js_request_data
             .call1(&JsValue::NULL, &path.to_str().unwrap().into())
@@ -187,9 +197,10 @@ impl SystemWorld {
     fn prepare_package(&self, spec: &PackageSpec) -> PackageResult<PathBuf> {
         let f = |e: JsValue| {
             if let Some(num) = e.as_f64() {
-                if num == -2.0 {
-                    return PackageError::NotFound(spec.clone());
-                }
+                return match num as i64 {
+                    2 => PackageError::NotFound(spec.clone()),
+                    _ => PackageError::Other(Some(EcoString::from("see console for details"))),
+                };
             }
             PackageError::Other(e.as_string().map(EcoString::from))
         };

@@ -31,12 +31,8 @@ function requestData(path: string): string {
     throw buffer[0]
 }
 
-let compiler: typst.SystemWorld; //= new typst.SystemWorld("", requestData)
+let compiler: typst.SystemWorld;
 
-// Receive data from main thread
-// `true` means a sharedarraybuffer can be used
-// `Array` is a list of fonts to be added to the compiler
-// `string` the url to the web assembly binary data
 onmessage = (ev: MessageEvent<CompileImageCommand | CompileSvgCommand | true | { wasm: string, basePath: string }>) => {
     if (ev.data == true) {
         canUseSharedArrayBuffer = true

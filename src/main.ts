@@ -1,5 +1,4 @@
 import { App, renderMath, HexString, Platform, Plugin, PluginSettingTab, Setting, loadMathJax, normalizePath, Notice, requestUrl } from 'obsidian';
-import { CapacitorHttp } from '@capacitor/core';
 
 declare const PLUGIN_VERSION: string;
 
@@ -8,6 +7,10 @@ import CompilerWorker from "./compiler.worker.ts"
 
 import TypstRenderElement from './typst-render-element.js';
 import { WorkerRequest } from './types';
+
+// @ts-ignore
+import untar from "js-untar"
+import { decompressSync } from "fflate"
 
 interface TypstPluginSettings {
     format: string,
@@ -23,6 +26,7 @@ interface TypstPluginSettings {
         code: string,
     },
     plugin_version: string,
+    autoDownloadPackages: boolean
 }
 
 const DEFAULT_SETTINGS: TypstPluginSettings = {
@@ -38,7 +42,8 @@ const DEFAULT_SETTINGS: TypstPluginSettings = {
         math: "#set page(margin: 0pt)\n#set align(horizon)",
         code: "#set page(margin: (y: 1em, x: 0pt))"
     },
-    plugin_version: PLUGIN_VERSION
+    plugin_version: PLUGIN_VERSION,
+    autoDownloadPackages: true
 }
 
 export default class TypstPlugin extends Plugin {
@@ -51,16 +56,22 @@ export default class TypstPlugin extends Plugin {
     prevCanvasHeight: number = 0;
     textEncoder: TextEncoder
     fs: any;
-    wasmPath = ".obsidian/plugins/typst/obsidian_typst_bg.wasm"
+
+    wasmPath: string
+    pluginPath: string
+    packagePath: string
 
     async onload() {
         console.log("loading Typst Renderer");
-        
+
         this.textEncoder = new TextEncoder()
         await this.loadSettings()
 
-        this.compilerWorker = (new CompilerWorker() as Worker);
+        this.pluginPath = this.app.vault.configDir + "/plugins/typst/"
+        this.packagePath = this.pluginPath + "packages/"
+        this.wasmPath = this.pluginPath + "obsidian_typst_bg.wasm"
 
+        this.compilerWorker = (new CompilerWorker() as Worker);
         if (!await this.app.vault.adapter.exists(this.wasmPath) || this.settings.plugin_version != PLUGIN_VERSION) {
             new Notice("Typst Renderer: Downloading required web assembly component!", 5000);
             try {
@@ -74,10 +85,10 @@ export default class TypstPlugin extends Plugin {
         this.compilerWorker.postMessage({
             wasm: URL.createObjectURL(
                 new Blob(
-                        [await this.app.vault.adapter.readBinary(this.wasmPath)],
-                        { type: "application/wasm" }
-                    )
-                ),
+                    [await this.app.vault.adapter.readBinary(this.wasmPath)],
+                    { type: "application/wasm" }
+                )
+            ),
             //@ts-ignore
             basePath: this.app.vault.adapter.basePath
         })
@@ -136,11 +147,11 @@ export default class TypstPlugin extends Plugin {
         if (asset == undefined) {
             throw "Could not find the correct file!"
         }
-        
-        response = requestUrl({url: asset.url, headers: {"Accept": "application/octet-stream"}})
+
+        response = requestUrl({ url: asset.url, headers: { "Accept": "application/octet-stream" } })
         data = await response.arrayBuffer
         await this.app.vault.adapter.writeBinary(
-            this.wasmPath, 
+            this.wasmPath,
             data
         )
 
@@ -197,14 +208,10 @@ export default class TypstPlugin extends Plugin {
 
     async handleWorkerRequest({ buffer: wbuffer, path }: WorkerRequest) {
         try {
-            let s = await (
-                path.startsWith("@")
-                    ? this.preparePackage(path)
-                    : this.getFileString(path)
-            );
-            if (s) {
+            const text = await (path.startsWith("@") ? this.preparePackage(path.slice(1)) : this.getFileString(path))
+            if (text) {
                 let buffer = Int32Array.from(this.textEncoder.encode(
-                    s
+                    text
                 ));
                 if (wbuffer.byteLength < (buffer.byteLength + 4)) {
                     //@ts-expect-error
@@ -212,39 +219,81 @@ export default class TypstPlugin extends Plugin {
                 }
                 wbuffer.set(buffer, 1)
                 wbuffer[0] = 0
-            } else {
-                wbuffer[0] = -2
             }
         } catch (error) {
-            wbuffer[0] = -1
-            throw error
+            if (typeof error === "number") {
+                wbuffer[0] = error
+            } else {
+                wbuffer[0] = 1
+                console.error(error)
+            }
         } finally {
             Atomics.notify(wbuffer, 0)
         }
     }
 
     async getFileString(path: string): Promise<string> {
-        if (require("path").isAbsolute(path)) {
-            return await this.fs.promises.readFile(path, { encoding: "utf8" })
-        } else {
-            return await this.app.vault.adapter.read(normalizePath(path))
+        try {
+            if (require("path").isAbsolute(path)) {
+                return await this.fs.promises.readFile(path, { encoding: "utf8" })
+            } else {
+                return await this.app.vault.adapter.read(normalizePath(path))
+            }
+        } catch (e) {
+            console.error(e);
+            if (e.code == "ENOENT"){
+                // File not found
+                throw 2
+            }
+            if (e.code == "EACCES") {
+                // access denied
+                throw 3
+            }
+            if (e.code == "EISDIR") {
+                // File is directory
+                throw 4
+            }
+            // Other File error
+            throw 5
         }
     }
 
     async preparePackage(spec: string): Promise<string | undefined> {
-        spec = spec.slice(1)
-        let subdir = "/typst/packages/" + spec
-
-        let dir = require('path').normalize(this.getDataDir() + subdir)
-        if (this.fs.existsSync(dir)) {
-            return dir
+        if (Platform.isDesktopApp) {
+            let subdir = "/typst/packages/" + spec
+            
+            let dir = require('path').normalize(this.getDataDir() + subdir)
+            if (this.fs.existsSync(dir)) {
+                return dir
+            }
+            
+            dir = require('path').normalize(this.getCacheDir() + subdir)
+            
+            if (this.fs.existsSync(dir)) {
+                return dir
+            }
         }
-
-        dir = require('path').normalize(this.getCacheDir() + subdir)
-
-        if (this.fs.existsSync(dir)) {
-            return dir
+        
+        const folder = this.packagePath + spec + "/"
+        if (await this.app.vault.adapter.exists(folder)) {
+            return folder
         }
+        if (this.settings.autoDownloadPackages) {
+            const [namespace, name, version] = spec.split("/")
+            try {
+                await this.fetchPackage(folder, name, version)
+                return folder
+            } catch (e) {
+                if (e == 2) {
+                    throw e
+                }
+                console.error(e);
+                // Other package error
+                throw 3
+            }
+        }
+        // Package not found error
+        throw 2
     }
 
     getDataDir() {
@@ -276,6 +325,27 @@ export default class TypstPlugin extends Plugin {
         }
         throw "Cannot find cache directory on an unknown platform"
     }
+
+    async fetchPackage(folder: string, name: string, version: string) {
+        const url = `https://packages.typst.org/preview/${name}-${version}.tar.gz`;
+        const response = await fetch(url)
+        if (response.status == 404) {
+            // Package not found error
+            throw 2
+        }
+        await this.app.vault.adapter.mkdir(folder)
+        await untar(decompressSync(new Uint8Array(await response.arrayBuffer())).buffer).progress(async (file: any) => {
+            // is folder
+            if (file.type == "5" && file.name != ".") {
+                await this.app.vault.adapter.mkdir(folder + file.name)
+            }
+            // is file
+            if (file.type === "0") {
+                await this.app.vault.adapter.writeBinary(folder + file.name, file.buffer)
+            }
+        });
+    }
+
 
     async processThenCompileTypst(path: string, source: string, size: number, display: boolean, fontSize: number) {
         const dpr = window.devicePixelRatio;

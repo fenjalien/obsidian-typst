@@ -27,3 +27,4 @@ data.json
 target
 
 *.wasm
+packages/**
