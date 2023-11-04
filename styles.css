@@ -5,7 +5,8 @@ textarea {
 }
 
 .setting-item:has(textarea),
-.font-settings {
+.font-settings,
+.package-settings {
     flex-direction: column;
     gap: 0.5em;
     align-items: stretch;
@@ -56,4 +57,31 @@ button,
 
 .typst-doc {
     vertical-align: bottom;
+}
+
+.package-settings {
+    gap: 0;
+}
+
+.package-settings .setting-item-description {
+    margin: 0.5em 0;
+}
+
+.package-item {
+    display: flex;
+    border-bottom: 1px solid var(--background-modifier-border);
+    gap: 0.5em;
+    align-items: center;
+    font-size: var(--font-ui-small);
+}
+
+.package-version {
+    margin-left: auto;
+
+}
+
+.delete-pkg-btn {
+    margin-top: 1.5em;
+    width: max-content;
+    margin-left: auto;
 }

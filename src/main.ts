@@ -1,5 +1,4 @@
 import { App, renderMath, HexString, Platform, Plugin, PluginSettingTab, Setting, loadMathJax, normalizePath, Notice, requestUrl } from 'obsidian';
-import { CapacitorHttp } from '@capacitor/core';
 
 declare const PLUGIN_VERSION: string;
 
@@ -61,26 +60,26 @@ export default class TypstPlugin extends Plugin {
 
         this.compilerWorker = (new CompilerWorker() as Worker);
 
-        if (!await this.app.vault.adapter.exists(this.wasmPath) || this.settings.plugin_version != PLUGIN_VERSION) {
-            new Notice("Typst Renderer: Downloading required web assembly component!", 5000);
-            try {
-                await this.fetchWasm()
-                new Notice("Typst Renderer: Web assembly component downloaded!", 5000)
-            } catch (error) {
-                new Notice("Typst Renderer: Failed to fetch component: " + error, 0)
-                console.error("Typst Renderer: Failed to fetch component: " + error)
-            }
-        }
-        this.compilerWorker.postMessage({
-            wasm: URL.createObjectURL(
-                new Blob(
-                        [await this.app.vault.adapter.readBinary(this.wasmPath)],
-                        { type: "application/wasm" }
-                    )
-                ),
-            //@ts-ignore
-            basePath: this.app.vault.adapter.basePath
-        })
+        // if (!await this.app.vault.adapter.exists(this.wasmPath) || this.settings.plugin_version != PLUGIN_VERSION) {
+        //     new Notice("Typst Renderer: Downloading required web assembly component!", 5000);
+        //     try {
+        //         await this.fetchWasm()
+        //         new Notice("Typst Renderer: Web assembly component downloaded!", 5000)
+        //     } catch (error) {
+        //         new Notice("Typst Renderer: Failed to fetch component: " + error, 0)
+        //         console.error("Typst Renderer: Failed to fetch component: " + error)
+        //     }
+        // }
+        // this.compilerWorker.postMessage({
+        //     wasm: URL.createObjectURL(
+        //         new Blob(
+        //                 [await this.app.vault.adapter.readBinary(this.wasmPath)],
+        //                 { type: "application/wasm" }
+        //             )
+        //         ),
+        //     //@ts-ignore
+        //     basePath: this.app.vault.adapter.basePath
+        // })
 
         if (!Platform.isMobileApp) {
             this.compilerWorker.postMessage(true);
@@ -464,6 +463,40 @@ class TypstSettingTab extends PluginSettingTab {
 
             this.renderFontTags(fontTagsDiv)
         }
+
+        //Dowloaded packages
+        //TODO: change this to function that gets the packages
+        const packages = [{name: 'cetz', version: '1.1'},{name: 'bop', version: '0.1.3'},{name: 'metro', version: '2.1.6'},{name: 'yeet', version: '1.9.1'},] 
+        
+        const packageSettingsDiv = containerEl.createDiv({ cls: "setting-item package-settings" })
+        packageSettingsDiv.createDiv({ text: "Downloaded Packages", cls: "setting-item-name" })
+        packageSettingsDiv.createDiv({ text: "These are the currently downloaded packages. Select the packages you want to delete.", cls: "setting-item-description" })
+        
+        packages.forEach(pkg => {
+            //create package item
+            const packageItem = packageSettingsDiv.createDiv({cls: "package-item"})
+            packageItem.createEl('input', { type: "checkbox", cls: "package-checkbox", value: JSON.stringify(pkg), attr: {name: "package-checkbox"}})
+            packageItem.createEl('p', {text: pkg.name})
+            packageItem.createEl('p', {text: pkg.version, cls: "package-version"})
+
+        })
+
+        const deletePackagesBtn = packageSettingsDiv.createEl('button', {text: 'Delete Selected Packages', cls: "delete-pkg-btn"})
+
+        deletePackagesBtn.addEventListener('click', () => {
+            const selectedPackageElements = packageSettingsDiv.querySelectorAll('input[name="package-checkbox"]:checked')
+            
+            let packagesToDelete : {name:string, version:string}[] = []
+            
+            selectedPackageElements.forEach(pkgEl => {
+                packagesToDelete.push(JSON.parse(pkgEl.getAttribute('value')!))
+            })
+            
+            console.log(packagesToDelete);
+            
+            //TODO: Delete packages here
+        })
+
     }
 
 
