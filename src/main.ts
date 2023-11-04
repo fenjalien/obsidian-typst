@@ -593,6 +593,11 @@ class TypstSettingTab extends PluginSettingTab {
             addFontBtn.addEventListener('click', async () => addFontTag())
 
             this.renderFontTags(fontTagsDiv)
+
+            new Setting(containerEl)
+                .setName("Download Missing Packages")
+                .setDesc("When on, if the compiler cannot find a package in the system it will attempt to download it. Packages downloaded this way will be stored within the vault in the plugin's folder. Always on for mobile.")
+                .addToggle(toggle => toggle.setValue(this.plugin.settings.autoDownloadPackages).onChange(async (value) => { this.plugin.settings.autoDownloadPackages = value; await this.plugin.saveSettings() }))
         }
 
         const packageSettingsDiv = containerEl.createDiv({ cls: "setting-item package-settings" })
