@@ -8,6 +8,10 @@ import CompilerWorker from "./compiler.worker.ts"
 import TypstRenderElement from './typst-render-element.js';
 import { WorkerRequest } from './types';
 
+// @ts-ignore
+import untar from "js-untar"
+import { decompressSync } from "fflate"
+
 interface TypstPluginSettings {
     format: string,
     noFill: boolean,
@@ -22,6 +26,7 @@ interface TypstPluginSettings {
         code: string,
     },
     plugin_version: string,
+    autoDownloadPackages: boolean
 }
 
 const DEFAULT_SETTINGS: TypstPluginSettings = {
@@ -37,7 +42,8 @@ const DEFAULT_SETTINGS: TypstPluginSettings = {
         math: "#set page(margin: 0pt)\n#set align(horizon)",
         code: "#set page(margin: (y: 1em, x: 0pt))"
     },
-    plugin_version: PLUGIN_VERSION
+    plugin_version: PLUGIN_VERSION,
+    autoDownloadPackages: true
 }
 
 export default class TypstPlugin extends Plugin {
@@ -50,39 +56,49 @@ export default class TypstPlugin extends Plugin {
     prevCanvasHeight: number = 0;
     textEncoder: TextEncoder
     fs: any;
-    wasmPath = ".obsidian/plugins/typst/obsidian_typst_bg.wasm"
+
+    wasmPath: string
+    pluginPath: string
+    packagePath: string
 
     async onload() {
         console.log("loading Typst Renderer");
-        
+
         this.textEncoder = new TextEncoder()
         await this.loadSettings()
 
+        this.pluginPath = this.app.vault.configDir + "/plugins/typst/"
+        this.packagePath = this.pluginPath + "packages/"
+        this.wasmPath = this.pluginPath + "obsidian_typst_bg.wasm"
+
         this.compilerWorker = (new CompilerWorker() as Worker);
+        if (!await this.app.vault.adapter.exists(this.wasmPath) || this.settings.plugin_version != PLUGIN_VERSION) {
+            new Notice("Typst Renderer: Downloading required web assembly component!", 5000);
+            try {
+                await this.fetchWasm()
+                new Notice("Typst Renderer: Web assembly component downloaded!", 5000)
+            } catch (error) {
+                new Notice("Typst Renderer: Failed to fetch component: " + error, 0)
+                console.error("Typst Renderer: Failed to fetch component: " + error)
+            }
+        }
+        this.compilerWorker.postMessage({
+            type: "startup",
+            data: {
+                wasm: URL.createObjectURL(
+                    new Blob(
+                        [await this.app.vault.adapter.readBinary(this.wasmPath)],
+                        { type: "application/wasm" }
+                    )
+                ),
+                //@ts-ignore
+                basePath: this.app.vault.adapter.basePath,
+                packagePath: this.packagePath
+            }
+        });
 
-        // if (!await this.app.vault.adapter.exists(this.wasmPath) || this.settings.plugin_version != PLUGIN_VERSION) {
-        //     new Notice("Typst Renderer: Downloading required web assembly component!", 5000);
-        //     try {
-        //         await this.fetchWasm()
-        //         new Notice("Typst Renderer: Web assembly component downloaded!", 5000)
-        //     } catch (error) {
-        //         new Notice("Typst Renderer: Failed to fetch component: " + error, 0)
-        //         console.error("Typst Renderer: Failed to fetch component: " + error)
-        //     }
-        // }
-        // this.compilerWorker.postMessage({
-        //     wasm: URL.createObjectURL(
-        //         new Blob(
-        //                 [await this.app.vault.adapter.readBinary(this.wasmPath)],
-        //                 { type: "application/wasm" }
-        //             )
-        //         ),
-        //     //@ts-ignore
-        //     basePath: this.app.vault.adapter.basePath
-        // })
-
-        if (!Platform.isMobileApp) {
-            this.compilerWorker.postMessage(true);
+        if (Platform.isDesktopApp) {
+            this.compilerWorker.postMessage({ type: "canUseSharedArrayBuffer", data: true });
             this.fs = require("fs")
             let fonts = await Promise.all(
                 //@ts-expect-error
@@ -92,7 +108,13 @@ export default class TypstPlugin extends Plugin {
                         async (font: { blob: () => Promise<Blob>; }) => await (await font.blob()).arrayBuffer()
                     )
             )
-            this.compilerWorker.postMessage(fonts, fonts)
+            this.compilerWorker.postMessage({ type: "fonts", data: fonts }, fonts)
+        } else {
+            // Mobile
+            // Make sure it exists, won't error/affect anything if it does exist 
+            await this.app.vault.adapter.mkdir(this.packagePath)
+            const packages = await this.getPackageList();
+            this.compilerWorker.postMessage({ type: "packages", data: packages })
         }
 
         // Setup cutom canvas
@@ -135,11 +157,11 @@ export default class TypstPlugin extends Plugin {
         if (asset == undefined) {
             throw "Could not find the correct file!"
         }
-        
-        response = requestUrl({url: asset.url, headers: {"Accept": "application/octet-stream"}})
+
+        response = requestUrl({ url: asset.url, headers: { "Accept": "application/octet-stream" } })
         data = await response.arrayBuffer
         await this.app.vault.adapter.writeBinary(
-            this.wasmPath, 
+            this.wasmPath,
             data
         )
 
@@ -147,43 +169,87 @@ export default class TypstPlugin extends Plugin {
         await this.saveSettings()
     }
 
+    async getPackageList() {
+        let getFolders = async (f: string) => (await this.app.vault.adapter.list(f)).folders
+        let packages = []
+        // namespace
+        for (const namespace of await getFolders(this.packagePath)) {
+            // name
+            for (const name of await getFolders(namespace)) {
+                // version
+                for (const version of await getFolders(name)) {
+                    packages.push(version.split("/").slice(-3).join("/"))
+                }
+            }
+        }
+        return packages
+    }
+
     async compileToTypst(path: string, source: string, size: number, display: boolean): Promise<ImageData> {
         return await navigator.locks.request("typst renderer compiler", async (lock) => {
+            let message
             if (this.settings.format == "svg") {
-                this.compilerWorker.postMessage({
-                    format: "svg",
-                    path,
-                    source
-                })
+                message = {
+                    type: "compile",
+                    data: {
+                        format: "svg",
+                        path,
+                        source
+                    }
+                }
             } else if (this.settings.format == "image") {
-                this.compilerWorker.postMessage({
-                    format: "image",
-                    source,
-                    path,
-                    pixel_per_pt: this.settings.pixel_per_pt,
-                    fill: `${this.settings.fill}${this.settings.noFill ? "00" : "ff"}`,
-                    size,
-                    display
-                });
+                message = {
+                    type: "compile",
+                    data: {
+                        format: "image",
+                        source,
+                        path,
+                        pixel_per_pt: this.settings.pixel_per_pt,
+                        fill: `${this.settings.fill}${this.settings.noFill ? "00" : "ff"}`,
+                        size,
+                        display
+                    }
+                }
             }
+            this.compilerWorker.postMessage(message)
             while (true) {
-                let result: ImageData | string | WorkerRequest = await new Promise((resolve, reject) => {
-                    const listener = (ev: MessageEvent<ImageData>) => {
-                        remove();
-                        resolve(ev.data);
+                let result: ImageData | string | WorkerRequest;
+                try {
+                    result = await new Promise((resolve, reject) => {
+                        const listener = (ev: MessageEvent<ImageData>) => {
+                            remove();
+                            resolve(ev.data);
+                        }
+                        const errorListener = (error: ErrorEvent) => {
+                            remove();
+                            reject(error.message)
+                        }
+                        const remove = () => {
+                            this.compilerWorker.removeEventListener("message", listener);
+                            this.compilerWorker.removeEventListener("error", errorListener);
+                        }
+                        this.compilerWorker.addEventListener("message", listener);
+                        this.compilerWorker.addEventListener("error", errorListener);
+                    })
+                } catch (e) {
+                    if (Platform.isMobileApp && e.startsWith("Uncaught Error: package not found (searched for")) {
+                        const spec = e.match(/"@.*?\/.*?"/)[0].slice(2, -1).replace(":", "/")
+                        const [namespace, name, version] = spec.split("/")
+                        try {
+                            await this.fetchPackage(this.packagePath + spec + "/", name, version)
+                        } catch (error) {
+                            if (error == 2) {
+                                throw e
+                            }
+                            throw error
+                        }
+                        const packages = await this.getPackageList()
+                        this.compilerWorker.postMessage({ type: "packages", data: packages })
+                        this.compilerWorker.postMessage(message)
+                        continue
                     }
-                    const errorListener = (error: ErrorEvent) => {
-                        remove();
-                        reject(error.message)
-                    }
-                    const remove = () => {
-                        this.compilerWorker.removeEventListener("message", listener);
-                        this.compilerWorker.removeEventListener("error", errorListener);
-                    }
-                    this.compilerWorker.addEventListener("message", listener);
-                    this.compilerWorker.addEventListener("error", errorListener);
-                })
-
+                    throw e
+                }
                 if (result instanceof ImageData || typeof result == "string") {
                     return result
                 }
@@ -196,14 +262,10 @@ export default class TypstPlugin extends Plugin {
 
     async handleWorkerRequest({ buffer: wbuffer, path }: WorkerRequest) {
         try {
-            let s = await (
-                path.startsWith("@")
-                    ? this.preparePackage(path)
-                    : this.getFileString(path)
-            );
-            if (s) {
+            const text = await (path.startsWith("@") ? this.preparePackage(path.slice(1)) : this.getFileString(path))
+            if (text) {
                 let buffer = Int32Array.from(this.textEncoder.encode(
-                    s
+                    text
                 ));
                 if (wbuffer.byteLength < (buffer.byteLength + 4)) {
                     //@ts-expect-error
@@ -211,39 +273,81 @@ export default class TypstPlugin extends Plugin {
                 }
                 wbuffer.set(buffer, 1)
                 wbuffer[0] = 0
-            } else {
-                wbuffer[0] = -2
             }
         } catch (error) {
-            wbuffer[0] = -1
-            throw error
+            if (typeof error === "number") {
+                wbuffer[0] = error
+            } else {
+                wbuffer[0] = 1
+                console.error(error)
+            }
         } finally {
             Atomics.notify(wbuffer, 0)
         }
     }
 
     async getFileString(path: string): Promise<string> {
-        if (require("path").isAbsolute(path)) {
-            return await this.fs.promises.readFile(path, { encoding: "utf8" })
-        } else {
-            return await this.app.vault.adapter.read(normalizePath(path))
+        try {
+            if (require("path").isAbsolute(path)) {
+                return await this.fs.promises.readFile(path, { encoding: "utf8" })
+            } else {
+                return await this.app.vault.adapter.read(normalizePath(path))
+            }
+        } catch (e) {
+            console.error(e);
+            if (e.code == "ENOENT") {
+                // File not found
+                throw 2
+            }
+            if (e.code == "EACCES") {
+                // access denied
+                throw 3
+            }
+            if (e.code == "EISDIR") {
+                // File is directory
+                throw 4
+            }
+            // Other File error
+            throw 5
         }
     }
 
     async preparePackage(spec: string): Promise<string | undefined> {
-        spec = spec.slice(1)
-        let subdir = "/typst/packages/" + spec
+        if (Platform.isDesktopApp) {
+            let subdir = "/typst/packages/" + spec
 
-        let dir = require('path').normalize(this.getDataDir() + subdir)
-        if (this.fs.existsSync(dir)) {
-            return dir
+            let dir = require('path').normalize(this.getDataDir() + subdir)
+            if (this.fs.existsSync(dir)) {
+                return dir
+            }
+
+            dir = require('path').normalize(this.getCacheDir() + subdir)
+
+            if (this.fs.existsSync(dir)) {
+                return dir
+            }
         }
 
-        dir = require('path').normalize(this.getCacheDir() + subdir)
-
-        if (this.fs.existsSync(dir)) {
-            return dir
+        const folder = this.packagePath + spec + "/"
+        if (await this.app.vault.adapter.exists(folder)) {
+            return folder
         }
+        if (this.settings.autoDownloadPackages) {
+            const [namespace, name, version] = spec.split("/")
+            try {
+                await this.fetchPackage(folder, name, version)
+                return folder
+            } catch (e) {
+                if (e == 2) {
+                    throw e
+                }
+                console.error(e);
+                // Other package error
+                throw 3
+            }
+        }
+        // Package not found error
+        throw 2
     }
 
     getDataDir() {
@@ -275,6 +379,27 @@ export default class TypstPlugin extends Plugin {
         }
         throw "Cannot find cache directory on an unknown platform"
     }
+
+    async fetchPackage(folder: string, name: string, version: string) {
+        const url = `https://packages.typst.org/preview/${name}-${version}.tar.gz`;
+        const response = await fetch(url)
+        if (response.status == 404) {
+            // Package not found error
+            throw 2
+        }
+        await this.app.vault.adapter.mkdir(folder)
+        await untar(decompressSync(new Uint8Array(await response.arrayBuffer())).buffer).progress(async (file: any) => {
+            // is folder
+            if (file.type == "5" && file.name != ".") {
+                await this.app.vault.adapter.mkdir(folder + file.name)
+            }
+            // is file
+            if (file.type === "0") {
+                await this.app.vault.adapter.writeBinary(folder + file.name, file.buffer)
+            }
+        });
+    }
+
 
     async processThenCompileTypst(path: string, source: string, size: number, display: boolean, fontSize: number) {
         const dpr = window.devicePixelRatio;

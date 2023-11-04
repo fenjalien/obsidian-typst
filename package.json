@@ -25,7 +25,8 @@
 		"typescript": "^5.1"
 	},
 	"dependencies": {
-		"@capacitor/core": "^5.5.1",
+		"fflate": "^0.8.1",
+		"js-untar": "^2.0.0",
 		"obsidian": "latest",
 		"obsidian-typst": "file:pkg",
 		"svgo": "^3.0.2",
