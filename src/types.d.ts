@@ -18,3 +18,8 @@ export interface WorkerRequest {
     buffer: Int32Array,
     path: string
 }
+
+export interface Message {
+    type: string,
+    data: any
+}

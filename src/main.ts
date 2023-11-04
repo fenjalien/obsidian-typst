@@ -83,18 +83,22 @@ export default class TypstPlugin extends Plugin {
             }
         }
         this.compilerWorker.postMessage({
-            wasm: URL.createObjectURL(
-                new Blob(
-                    [await this.app.vault.adapter.readBinary(this.wasmPath)],
-                    { type: "application/wasm" }
-                )
-            ),
-            //@ts-ignore
-            basePath: this.app.vault.adapter.basePath
-        })
+            type: "startup",
+            data: {
+                wasm: URL.createObjectURL(
+                    new Blob(
+                        [await this.app.vault.adapter.readBinary(this.wasmPath)],
+                        { type: "application/wasm" }
+                    )
+                ),
+                //@ts-ignore
+                basePath: this.app.vault.adapter.basePath,
+                packagePath: this.packagePath
+            }
+        });
 
-        if (!Platform.isMobileApp) {
-            this.compilerWorker.postMessage(true);
+        if (Platform.isDesktopApp) {
+            this.compilerWorker.postMessage({ type: "canUseSharedArrayBuffer", data: true });
             this.fs = require("fs")
             let fonts = await Promise.all(
                 //@ts-expect-error
@@ -104,7 +108,13 @@ export default class TypstPlugin extends Plugin {
                         async (font: { blob: () => Promise<Blob>; }) => await (await font.blob()).arrayBuffer()
                     )
             )
-            this.compilerWorker.postMessage(fonts, fonts)
+            this.compilerWorker.postMessage({ type: "fonts", data: fonts }, fonts)
+        } else {
+            // Mobile
+            // Make sure it exists, won't error/affect anything if it does exist 
+            await this.app.vault.adapter.mkdir(this.packagePath)
+            const packages = await this.getPackageList();
+            this.compilerWorker.postMessage({ type: "packages", data: packages })
         }
 
         // Setup cutom canvas
@@ -159,43 +169,87 @@ export default class TypstPlugin extends Plugin {
         await this.saveSettings()
     }
 
+    async getPackageList() {
+        let getFolders = async (f: string) => (await this.app.vault.adapter.list(f)).folders
+        let packages = []
+        // namespace
+        for (const namespace of await getFolders(this.packagePath)) {
+            // name
+            for (const name of await getFolders(namespace)) {
+                // version
+                for (const version of await getFolders(name)) {
+                    packages.push(version.split("/").slice(-3).join("/"))
+                }
+            }
+        }
+        return packages
+    }
+
     async compileToTypst(path: string, source: string, size: number, display: boolean): Promise<ImageData> {
         return await navigator.locks.request("typst renderer compiler", async (lock) => {
+            let message
             if (this.settings.format == "svg") {
-                this.compilerWorker.postMessage({
-                    format: "svg",
-                    path,
-                    source
-                })
+                message = {
+                    type: "compile",
+                    data: {
+                        format: "svg",
+                        path,
+                        source
+                    }
+                }
             } else if (this.settings.format == "image") {
-                this.compilerWorker.postMessage({
-                    format: "image",
-                    source,
-                    path,
-                    pixel_per_pt: this.settings.pixel_per_pt,
-                    fill: `${this.settings.fill}${this.settings.noFill ? "00" : "ff"}`,
-                    size,
-                    display
-                });
+                message = {
+                    type: "compile",
+                    data: {
+                        format: "image",
+                        source,
+                        path,
+                        pixel_per_pt: this.settings.pixel_per_pt,
+                        fill: `${this.settings.fill}${this.settings.noFill ? "00" : "ff"}`,
+                        size,
+                        display
+                    }
+                }
             }
+            this.compilerWorker.postMessage(message)
             while (true) {
-                let result: ImageData | string | WorkerRequest = await new Promise((resolve, reject) => {
-                    const listener = (ev: MessageEvent<ImageData>) => {
-                        remove();
-                        resolve(ev.data);
+                let result: ImageData | string | WorkerRequest;
+                try {
+                    result = await new Promise((resolve, reject) => {
+                        const listener = (ev: MessageEvent<ImageData>) => {
+                            remove();
+                            resolve(ev.data);
+                        }
+                        const errorListener = (error: ErrorEvent) => {
+                            remove();
+                            reject(error.message)
+                        }
+                        const remove = () => {
+                            this.compilerWorker.removeEventListener("message", listener);
+                            this.compilerWorker.removeEventListener("error", errorListener);
+                        }
+                        this.compilerWorker.addEventListener("message", listener);
+                        this.compilerWorker.addEventListener("error", errorListener);
+                    })
+                } catch (e) {
+                    if (Platform.isMobileApp && e.startsWith("Uncaught Error: package not found (searched for")) {
+                        const spec = e.match(/"@.*?\/.*?"/)[0].slice(2, -1).replace(":", "/")
+                        const [namespace, name, version] = spec.split("/")
+                        try {
+                            await this.fetchPackage(this.packagePath + spec + "/", name, version)
+                        } catch (error) {
+                            if (error == 2) {
+                                throw e
+                            }
+                            throw error
+                        }
+                        const packages = await this.getPackageList()
+                        this.compilerWorker.postMessage({ type: "packages", data: packages })
+                        this.compilerWorker.postMessage(message)
+                        continue
                     }
-                    const errorListener = (error: ErrorEvent) => {
-                        remove();
-                        reject(error.message)
-                    }
-                    const remove = () => {
-                        this.compilerWorker.removeEventListener("message", listener);
-                        this.compilerWorker.removeEventListener("error", errorListener);
-                    }
-                    this.compilerWorker.addEventListener("message", listener);
-                    this.compilerWorker.addEventListener("error", errorListener);
-                })
-
+                    throw e
+                }
                 if (result instanceof ImageData || typeof result == "string") {
                     return result
                 }
@@ -241,7 +295,7 @@ export default class TypstPlugin extends Plugin {
             }
         } catch (e) {
             console.error(e);
-            if (e.code == "ENOENT"){
+            if (e.code == "ENOENT") {
                 // File not found
                 throw 2
             }
@@ -261,19 +315,19 @@ export default class TypstPlugin extends Plugin {
     async preparePackage(spec: string): Promise<string | undefined> {
         if (Platform.isDesktopApp) {
             let subdir = "/typst/packages/" + spec
-            
+
             let dir = require('path').normalize(this.getDataDir() + subdir)
             if (this.fs.existsSync(dir)) {
                 return dir
             }
-            
+
             dir = require('path').normalize(this.getCacheDir() + subdir)
-            
+
             if (this.fs.existsSync(dir)) {
                 return dir
             }
         }
-        
+
         const folder = this.packagePath + spec + "/"
         if (await this.app.vault.adapter.exists(folder)) {
             return folder

@@ -18,7 +18,7 @@ use typst::{
 };
 use typst_library::prelude::EcoString;
 use wasm_bindgen::prelude::*;
-use web_sys::ImageData;
+use web_sys::{ImageData, console};
 
 mod diagnostic;
 mod file_entry;
@@ -171,6 +171,7 @@ impl World for SystemWorld {
 impl SystemWorld {
     fn reset(&mut self) {
         self.files.borrow_mut().clear();
+        self.packages.borrow_mut().clear();
         self.now.take();
     }
 
@@ -231,8 +232,6 @@ impl SystemWorld {
             Some(spec) => self.prepare_package(spec)?,
             None => self.root.clone(),
         };
-        // .
-        // .ok_or(FileError::AccessDenied)?;
 
         let text = self.read_file(&id.vpath().resolve(&path).ok_or(FileError::AccessDenied)?)?;
 
