@@ -169,7 +169,7 @@ export default class TypstPlugin extends Plugin {
         await this.saveSettings()
     }
 
-    async getPackageList() {
+    async getPackageList(): Promise<string[]> {
         let getFolders = async (f: string) => (await this.app.vault.adapter.list(f)).folders
         let packages = []
         // namespace
@@ -183,6 +183,12 @@ export default class TypstPlugin extends Plugin {
             }
         }
         return packages
+    }
+
+    async deletePackages(packages: string[]) {
+        for (const folder of packages) {
+            await this.app.vault.adapter.rmdir(this.packagePath + folder, true)
+        }
     }
 
     async compileToTypst(path: string, source: string, size: number, display: boolean): Promise<ImageData> {
@@ -468,7 +474,7 @@ class TypstSettingTab extends PluginSettingTab {
     }
 
 
-    display(): void {
+    async display() {
         const { containerEl } = this;
 
         containerEl.empty();
@@ -589,37 +595,32 @@ class TypstSettingTab extends PluginSettingTab {
             this.renderFontTags(fontTagsDiv)
         }
 
-        //Dowloaded packages
-        //TODO: change this to function that gets the packages
-        const packages = [{name: 'cetz', version: '1.1'},{name: 'bop', version: '0.1.3'},{name: 'metro', version: '2.1.6'},{name: 'yeet', version: '1.9.1'},] 
-        
         const packageSettingsDiv = containerEl.createDiv({ cls: "setting-item package-settings" })
         packageSettingsDiv.createDiv({ text: "Downloaded Packages", cls: "setting-item-name" })
-        packageSettingsDiv.createDiv({ text: "These are the currently downloaded packages. Select the packages you want to delete.", cls: "setting-item-description" })
-        
-        packages.forEach(pkg => {
-            //create package item
-            const packageItem = packageSettingsDiv.createDiv({cls: "package-item"})
-            packageItem.createEl('input', { type: "checkbox", cls: "package-checkbox", value: JSON.stringify(pkg), attr: {name: "package-checkbox"}})
-            packageItem.createEl('p', {text: pkg.name})
-            packageItem.createEl('p', {text: pkg.version, cls: "package-version"})
+        packageSettingsDiv.createDiv({ text: "These are the currently downloaded packages. Select the packages you want to delete.", cls: "setting-item-description" });
 
+        (await this.plugin.getPackageList()).forEach(pkg => {
+            const [namespace, name, version] = pkg.split("/")
+            //create package item
+            const packageItem = packageSettingsDiv.createDiv({ cls: "package-item" })
+            packageItem.createEl('input', { type: "checkbox", cls: "package-checkbox", value: pkg, attr: { name: "package-checkbox" } })
+            packageItem.createEl('p', { text: name })
+            packageItem.createEl('p', { text: version, cls: "package-version" })
         })
 
-        const deletePackagesBtn = packageSettingsDiv.createEl('button', {text: 'Delete Selected Packages', cls: "delete-pkg-btn"})
+        const deletePackagesBtn = packageSettingsDiv.createEl('button', { text: 'Delete Selected Packages', cls: "delete-pkg-btn" })
 
         deletePackagesBtn.addEventListener('click', () => {
             const selectedPackageElements = packageSettingsDiv.querySelectorAll('input[name="package-checkbox"]:checked')
-            
-            let packagesToDelete : {name:string, version:string}[] = []
-            
+
+            let packagesToDelete: string[] = []
+
             selectedPackageElements.forEach(pkgEl => {
-                packagesToDelete.push(JSON.parse(pkgEl.getAttribute('value')!))
+                packagesToDelete.push(pkgEl.getAttribute('value')!)
+                packageSettingsDiv.removeChild(pkgEl.parentNode!)
             })
-            
-            console.log(packagesToDelete);
-            
-            //TODO: Delete packages here
+
+            this.plugin.deletePackages(packagesToDelete)
         })
 
     }
