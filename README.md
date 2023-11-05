@@ -5,19 +5,24 @@ Renders `typst` code blocks, and optionally math blocks, into images using [Typs
 ## Small Things to NOTE
 - Typst does not currently support exporting to HTML only PDFs, PNGs and SVGs. So due to image scaling, the rendered views may look a bit terrible. If you know how to fix this PLEASE HELP.
 - File paths should be relative to the vault folder.
-- You can not import on mobile as file reading is NOT supported on mobile, this is due to `SharedArrayBuffer`s not being available on mobile but is available for some reason on desktop.
 
 ## Versions
 
 | Plugin | Typst |
 |-|-|
+| 0.8 | 0.9.0 |
+| 0.7 | 0.8.0 |
 | 0.6 | [522708b](https://github.com/typst/typst/commit/522708b9df0b9b2f8265938aa1f0aeda8e6e6c1f) (Some commits after 0.7.0 to include SVG export) |
 | 0.5 | 0.6.0 |
 | 0.4 | 0.3.0 |
 | 0.3 | 0.2.0 |
 
 ## Using Packages
-The plugin supports only the reading of packages from the [`@preview`](https://github.com/typst/packages#downloads) and [`@local`](https://github.com/typst/packages#local-packages) namespaces. Please use the Typst cli to download your desired packages. This means the plugin accesses files outside of your vault but only to read them, it does not modify or create files outside of your vault.
+On desktop the plugin supports reading packages from the [`@preview`](https://github.com/typst/packages#downloads) and [`@local`](https://github.com/typst/packages#local-packages) namespaces. If a package cannot be found in either folder and the "Download Missing Packages" setting is on, the package will be downloaded and saved within the current vault in the pulgin's folder. 
+
+On mobile only the `@preview` namespace is supported and will always download missing packages to the vault.
+
+You can view the downloaded packages in the settings and choose which ones to delete.
 
 ## Math Block Usage
 The plugin can render `typst` inside math blocks! By default this is off, to enable it set the "Override Math Blocks" setting or use the "Toggle math block override" command. Math block types are conserved between Obsidian and Typst, `$...$` -> `$...$` and `$$...$$` -> `$ ... $`.
@@ -106,7 +111,7 @@ Install "Typst Renderer" from the community plugins tab in settings
 
 or 
 
-Install it by copying `main.js`, `styles.css`, and `manifest.json` from the releases tab to the folder `.obsidian/plugins/obsidian-typst` in your vault.
+Install it by copying `main.js`, `styles.css`, `obsidian_typst_bg.wasm` and `manifest.json` from the releases tab to the folder `.obsidian/plugins/typst` in your vault.
 
 ## TODO / Goals (In no particular order)
 - [x] Better font loading
