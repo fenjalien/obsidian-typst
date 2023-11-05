@@ -122,5 +122,5 @@ Install it by copying `main.js`, `styles.css`, `obsidian_typst_bg.wasm` and `man
 - [ ] Use HTML output
 - [x] Override default equation rendering
 - [ ] Custom editor for `.typ` files
-- [ ] Mobile file reading
-- [ ] Automate package downloading
+- [x] Mobile file reading
+- [x] Automate package downloading
