@@ -1,11 +1,11 @@
 [package]
 name = "obsidian-typst"
-version = "0.7.1"
+version = "0.8.0"
 authors = ["fenjalien"]
 edition = "2021"
 description = "Renders `typst` code blocks to images with Typst."
 readme = "README.md"
-rust-version = "1.70"
+rust-version = "1.72.1"
 
 [lib]
 crate-type = ["cdylib"]
