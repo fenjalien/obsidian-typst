@@ -13,12 +13,11 @@ use typst::{
     font::{Font, FontBook},
     syntax::Source,
     syntax::{FileId, PackageSpec, VirtualPath},
-    // util::PathExt,
     World,
 };
 use typst_library::prelude::EcoString;
 use wasm_bindgen::prelude::*;
-use web_sys::{ImageData, console};
+use web_sys::ImageData;
 
 mod diagnostic;
 mod file_entry;
