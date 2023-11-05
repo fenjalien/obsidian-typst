@@ -239,7 +239,7 @@ export default class TypstPlugin extends Plugin {
                     })
                 } catch (e) {
                     if (Platform.isMobileApp && e.startsWith("Uncaught Error: package not found (searched for")) {
-                        const spec = e.match(/"@.*?\/.*?"/)[0].slice(2, -1).replace(":", "/")
+                        const spec = e.match(/"@preview\/.*?"/)[0].slice(2, -1).replace(":", "/")
                         const [namespace, name, version] = spec.split("/")
                         try {
                             await this.fetchPackage(this.packagePath + spec + "/", name, version)
@@ -338,7 +338,7 @@ export default class TypstPlugin extends Plugin {
         if (await this.app.vault.adapter.exists(folder)) {
             return folder
         }
-        if (this.settings.autoDownloadPackages) {
+        if (spec.startsWith("preview") && this.settings.autoDownloadPackages) {
             const [namespace, name, version] = spec.split("/")
             try {
                 await this.fetchPackage(folder, name, version)
