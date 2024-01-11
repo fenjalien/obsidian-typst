@@ -12,8 +12,10 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # Everything to do with Typst
-typst = { git = "https://github.com/typst/typst.git", tag = "v0.9.0" }
-typst-library = { git = "https://github.com/typst/typst.git", tag = "v0.9.0" }
+typst = { git = "https://github.com/typst/typst.git", tag = "v0.10.0" }
+typst-render = { git = "https://github.com/typst/typst.git", tag = "v0.10.0" }
+typst-svg = { git = "https://github.com/typst/typst.git", tag = "v0.10.0" }
+# typst-library = { git = "https://github.com/typst/typst.git", tag = "v0.10.0" }
 comemo = "0.3"
 
 
@@ -35,5 +37,5 @@ console_error_panic_hook = "0.1.7"
 # Image handling
 fast_image_resize = "2.7.3"
 
-ariadne = "0.3.0"
+ariadne = "0.4.0"
 chrono = "0.4.30"

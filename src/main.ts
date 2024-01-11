@@ -153,7 +153,7 @@ export default class TypstPlugin extends Plugin {
         let data
         response = requestUrl(`https://api.github.com/repos/fenjalien/obsidian-typst/releases/tags/${PLUGIN_VERSION}`)
         data = await response.json
-        let asset = data.assets.find((a: any) => a.name == "obsidian_typst_compiler.wasm")
+        let asset = data.assets.find((a: any) => a.name == "obsidian_typst_bg.wasm")
         if (asset == undefined) {
             throw "Could not find the correct file!"
         }

@@ -2,10 +2,7 @@ use std::{num::NonZeroU32, str::FromStr};
 
 use fast_image_resize as fr;
 use fr::Resizer;
-use typst::{
-    doc::Document,
-    geom::Color,
-};
+use typst::{model::Document, visualize::Color};
 use wasm_bindgen::Clamped;
 use web_sys::ImageData;
 
@@ -17,11 +14,8 @@ pub fn to_image(
     size: u32,
     display: bool,
 ) -> Result<ImageData, wasm_bindgen::JsValue> {
-    let mut pixmap = typst::export::render(
-        &document.pages[0],
-        pixel_per_pt,
-        Color::from_str(&fill)?,
-    );
+    let mut pixmap =
+        typst_render::render(&document.pages[0], pixel_per_pt, Color::from_str(&fill)?);
 
     let width = pixmap.width();
     let height = pixmap.height();
@@ -71,5 +65,5 @@ pub fn to_image(
 }
 
 pub fn to_svg(document: Document) -> String {
-    typst::export::svg(&document.pages[0])
+    typst_svg::svg(&document.pages[0])
 }

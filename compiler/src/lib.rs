@@ -7,15 +7,13 @@ use std::{
     path::{Path, PathBuf},
 };
 use typst::{
-    diag::{FileError, FileResult, PackageError, PackageResult},
-    doc::Document,
-    eval::{Bytes, Datetime, Library, Tracer},
-    font::{Font, FontBook},
+    diag::{FileError, FileResult, PackageError, PackageResult, EcoString},
+    eval::Tracer,
     syntax::Source,
     syntax::{FileId, PackageSpec, VirtualPath},
-    World,
+    text::{Font, FontBook},
+    Library, World, model::Document, foundations::{Bytes, Datetime},
 };
-use typst_library::prelude::EcoString;
 use wasm_bindgen::prelude::*;
 use web_sys::ImageData;
 
@@ -61,7 +59,7 @@ impl SystemWorld {
         Self {
             root: PathBuf::from(root),
             main: FileId::new(None, VirtualPath::new("")),
-            library: Prehashed::new(typst_library::build()),
+            library: Prehashed::new(Library::build()),
             book: Prehashed::new(book),
             fonts,
             files: RefCell::default(),

@@ -39,4 +39,4 @@ jobs:
           gh release create "$tag" \
             --title="$tag" \
             --draft \
-            main.js manifest.json styles.css pkg/obsidian_typst_bg.wasm
+            main.js manifest.json styles.css obsidian_typst_bg.wasm

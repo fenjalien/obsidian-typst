@@ -5,6 +5,7 @@ Renders `typst` code blocks, and optionally math blocks, into images using [Typs
 ## Small Things to NOTE
 - Typst does not currently support exporting to HTML only PDFs, PNGs and SVGs. So due to image scaling, the rendered views may look a bit terrible. If you know how to fix this PLEASE HELP.
 - File paths should be relative to the vault folder.
+- To help with loading times the web assembly file must be downloaded separately. This will automatically happen the first time the plugin is enabled and after an update!
 
 ## Versions
 
@@ -122,5 +123,5 @@ Install it by copying `main.js`, `styles.css`, `obsidian_typst_bg.wasm` and `man
 - [ ] Use HTML output
 - [x] Override default equation rendering
 - [ ] Custom editor for `.typ` files
-- [ ] Mobile file reading
-- [ ] Automate package downloading
+- [x] Mobile file reading
+- [x] Automate package downloading

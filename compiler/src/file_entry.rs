@@ -1,7 +1,7 @@
 use std::cell::OnceCell;
 
 use typst::{
-    eval::Bytes,
+    foundations::Bytes,
     syntax::{FileId, Source},
 };
 
