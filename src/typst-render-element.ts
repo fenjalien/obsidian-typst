@@ -1,6 +1,3 @@
-//@ts-ignore
-import { optimize } from 'svgo/dist/svgo.browser.js';
-
 export default class TypstRenderElement extends HTMLElement {
     static compile: (path: string, source: string, size: number, display: boolean, fontSize: number) => Promise<ImageData | string>;
     static nextId = 0;
@@ -27,10 +24,6 @@ export default class TypstRenderElement extends HTMLElement {
             console.warn("Typst Renderer: Canvas element has been called before connection");
             return;
         }
-
-        // if (this.display && this.math) {
-        // this.style.height = TypstRenderElement.prevHeight;
-        // }
 
         if (this.format == "image" && this.canvas == undefined) {
             this.canvas = this.appendChild(createEl("canvas", { attr: { height: TypstRenderElement.prevHeight }, cls: "typst-doc" }))
@@ -81,18 +74,9 @@ export default class TypstRenderElement extends HTMLElement {
                     if (result instanceof ImageData && this.format == "image") {
                         this.drawToCanvas(result)
                     } else if (typeof result == "string" && this.format == "svg") {
-                        this.innerHTML = optimize(result, {
-                            plugins: [
-                                {
-                                    name: "prefixIds",
-                                    params: {
-                                        prefix: this.num,
-                                        prefixClassNames: false,
-                                    }
-                                }
-                            ]
-                        }).data;
-                        (this.firstElementChild as SVGElement).setAttribute(this.display ? "width" : "height", this.size.toString())
+                        this.innerHTML = result;
+                        (this.firstElementChild as SVGElement).setAttribute("width", `${this.firstElementChild!.clientWidth /fontSize}em`);
+                        (this.firstElementChild as SVGElement).setAttribute("height", `${this.firstElementChild!.clientHeight /fontSize}em`);
                     }
                 } catch (error) {
                     // For some reason it is uncaught so remove "Uncaught "

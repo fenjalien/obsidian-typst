@@ -59,6 +59,10 @@ button,
     vertical-align: bottom;
 }
 
+typst-renderer {
+    display: inline-block;
+}
+
 .package-settings {
     gap: 0;
 }
@@ -85,3 +89,4 @@ button,
     width: max-content;
     margin-left: auto;
 }
+
