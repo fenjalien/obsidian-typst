@@ -1,3 +1,9 @@
+# 0.9.0
+- Upgrade to Typst 0.10.0
+- Remove SVGO dependency
+- SVG output now scales with the line size [#39](https://github.com/fenjalien/obsidian-typst/issues/39)
+
+
 # 0.8.0
 - Upgrade to Typst 0.9.0
 - Fix slow loading times [#34](https://github.com/fenjalien/obsidian-typst/issues/34)

@@ -11,6 +11,7 @@ Renders `typst` code blocks, and optionally math blocks, into images using [Typs
 
 | Plugin | Typst |
 |-|-|
+| 0.9 | 0.10.0 |
 | 0.8 | 0.9.0 |
 | 0.7 | 0.8.0 |
 | 0.6 | [522708b](https://github.com/typst/typst/commit/522708b9df0b9b2f8265938aa1f0aeda8e6e6c1f) (Some commits after 0.7.0 to include SVG export) |
