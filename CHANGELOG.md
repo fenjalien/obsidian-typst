@@ -1,3 +1,7 @@
+# 0.10.0
+- Upgrade to Typst 0.11.0
+- Update fonts to be equal with Typst 0.11
+
 # 0.9.0
 - Upgrade to Typst 0.10.0
 - Remove SVGO dependency

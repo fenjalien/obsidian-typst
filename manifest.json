@@ -1,7 +1,7 @@
 {
 	"id": "typst",
 	"name": "Typst Renderer",
-	"version": "0.9.0",
+	"version": "0.10.0",
 	"minAppVersion": "1.0.0",
 	"description": "Renders `typst` code blocks and math blocks with Typst.",
 	"author": "fenjalien",

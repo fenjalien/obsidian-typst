@@ -11,6 +11,7 @@ Renders `typst` code blocks, and optionally math blocks, into images using [Typs
 
 | Plugin | Typst |
 |-|-|
+| 0.10 | 0.11.0 |
 | 0.9 | 0.10.0 |
 | 0.8 | 0.9.0 |
 | 0.7 | 0.8.0 |
@@ -127,3 +128,5 @@ Install it by copying `main.js`, `styles.css`, `obsidian_typst_bg.wasm` and `man
 - [ ] Custom editor for `.typ` files
 - [x] Mobile file reading
 - [x] Automate package downloading
+- [ ] Use `sys.stdin` for preambles instead of modifying the source cod
+- [ ] Overhall plugin structure (mostly communication with the webworker)
