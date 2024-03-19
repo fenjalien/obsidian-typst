@@ -34,9 +34,10 @@ From what I've experimented with, normal math blocks are okay with Typst but Typ
 For styling and using imports with math blocks see the next section.
 
 ## Preambles
-Need to style your `typst` code the same way everytime and don't to write it out each time? Or using math blocks and need a way to import things? Use PREAMBLES! 
 
-Preambles are prepended to your `typst` code before compiling. There are three different types in settings:
+Need to style your `typst` code the same way everytime and don't to write it out each time? Or using math blocks and need a way to import things? Use PREAMBLES!
+
+Preambles are prepended to your `typst` code before compiling. There are three different types on the "Typst Renderer" plugin settings page:
 - `shared`: Prepended to all `typst` code.
 - `math`: Prepended to `typst` code only in math blocks.
 - `code`: Prepended to `typst` code only in code blocks.
