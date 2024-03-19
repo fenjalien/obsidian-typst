@@ -60,8 +60,8 @@ export default class TypstRenderElement extends HTMLElement {
         this.abortController = new AbortController()
         try {
             await navigator.locks.request(this.id, { signal: this.abortController.signal }, async () => {
-                let fontSize = parseFloat(document.body.getCssPropertyValue("--font-text-size"))
-                this.size = this.display ? this.clientWidth : parseFloat(document.body.getCssPropertyValue("--line-height-normal")) * fontSize
+                let fontSize = parseFloat(getComputedStyle(this).fontSize)
+                this.size = this.display ? this.clientWidth : parseFloat(getComputedStyle(this).lineHeight)
 
                 // resizeObserver can trigger before the element gets disconnected which can cause the size to be 0
                 // which causes a NaN. size can also sometimes be -ve so wait for resize to draw it again
@@ -75,8 +75,11 @@ export default class TypstRenderElement extends HTMLElement {
                         this.drawToCanvas(result)
                     } else if (typeof result == "string" && this.format == "svg") {
                         this.innerHTML = result;
-                        (this.firstElementChild as SVGElement).setAttribute("width", `${this.firstElementChild!.clientWidth /fontSize}em`);
-                        (this.firstElementChild as SVGElement).setAttribute("height", `${this.firstElementChild!.clientHeight /fontSize}em`);
+                        let child = (this.firstElementChild as SVGElement);
+                        child.setAttribute("width", child.getAttribute("width")!.replace("pt", ""))
+                        child.setAttribute("height", child.getAttribute("height")!.replace("pt", ""))
+                        child.setAttribute("width", `${this.firstElementChild!.clientWidth /fontSize}em`);
+                        child.setAttribute("height", `${this.firstElementChild!.clientHeight /fontSize}em`);
                     }
                 } catch (error) {
                     // For some reason it is uncaught so remove "Uncaught "

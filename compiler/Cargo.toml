@@ -12,11 +12,11 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # Everything to do with Typst
-typst = { git = "https://github.com/typst/typst.git", tag = "v0.10.0" }
-typst-render = { git = "https://github.com/typst/typst.git", tag = "v0.10.0" }
-typst-svg = { git = "https://github.com/typst/typst.git", tag = "v0.10.0" }
-# typst-library = { git = "https://github.com/typst/typst.git", tag = "v0.10.0" }
-comemo = "0.3"
+typst = "0.11"
+typst-render = "0.11"
+typst-svg = "0.11"
+typst-assets = {version = "0.11", features = ["fonts"]}
+comemo = "0.4"
 
 
 # Everything to do with wasm

@@ -7,12 +7,13 @@ use std::{
     path::{Path, PathBuf},
 };
 use typst::{
-    diag::{FileError, FileResult, PackageError, PackageResult, EcoString},
+    diag::{EcoString, FileError, FileResult, PackageError, PackageResult},
     eval::Tracer,
-    syntax::Source,
-    syntax::{FileId, PackageSpec, VirtualPath},
+    foundations::{Bytes, Datetime},
+    model::Document,
+    syntax::{package::PackageSpec, FileId, Source, VirtualPath},
     text::{Font, FontBook},
-    Library, World, model::Document, foundations::{Bytes, Datetime},
+    Library, World,
 };
 use wasm_bindgen::prelude::*;
 use web_sys::ImageData;
@@ -59,7 +60,7 @@ impl SystemWorld {
         Self {
             root: PathBuf::from(root),
             main: FileId::new(None, VirtualPath::new("")),
-            library: Prehashed::new(Library::build()),
+            library: Prehashed::new(Library::builder().build()),
             book: Prehashed::new(book),
             fonts,
             files: RefCell::default(),
@@ -241,31 +242,13 @@ impl SystemWorld {
         let mut book = FontBook::new();
         let mut fonts = Vec::new();
 
-        let mut process = |bytes: &'static [u8]| {
-            let buffer = Bytes::from_static(bytes);
+        for data in typst_assets::fonts() {
+            let buffer = Bytes::from_static(data);
             for font in Font::iter(buffer) {
                 book.push(font.info().clone());
                 fonts.push(font);
             }
-        };
-
-        macro_rules! add {
-            ($filename:literal) => {
-                process(include_bytes!(concat!("../assets/fonts/", $filename)));
-            };
         }
-
-        // Embed default fonts.
-        add!("LinLibertine_R.ttf");
-        add!("LinLibertine_RB.ttf");
-        add!("LinLibertine_RBI.ttf");
-        add!("LinLibertine_RI.ttf");
-        add!("NewCMMath-Book.otf");
-        add!("NewCMMath-Regular.otf");
-        add!("DejaVuSansMono.ttf");
-        add!("DejaVuSansMono-Bold.ttf");
-        add!("DejaVuSansMono-Oblique.ttf");
-        add!("DejaVuSansMono-BoldOblique.ttf");
 
         return (book, fonts);
     }

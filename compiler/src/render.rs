@@ -14,8 +14,11 @@ pub fn to_image(
     size: u32,
     display: bool,
 ) -> Result<ImageData, wasm_bindgen::JsValue> {
-    let mut pixmap =
-        typst_render::render(&document.pages[0], pixel_per_pt, Color::from_str(&fill)?);
+    let mut pixmap = typst_render::render(
+        &document.pages[0].frame,
+        pixel_per_pt,
+        Color::from_str(&fill)?,
+    );
 
     let width = pixmap.width();
     let height = pixmap.height();
@@ -65,5 +68,5 @@ pub fn to_image(
 }
 
 pub fn to_svg(document: Document) -> String {
-    typst_svg::svg(&document.pages[0])
+    typst_svg::svg(&document.pages[0].frame)
 }
