@@ -1,35 +1,36 @@
 {
-	"name": "obsidian-typst-plugin",
-	"version": "0.10.0",
-	"description": "Renders `typst` code blocks to images with Typst.",
-	"main": "main.js",
-	"scripts": {
-		"build-dev": "node esbuild.config.mjs",
-		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-		"wasm": "wasm-pack build compiler --target web --out-dir ../pkg",
-		"wasm-dev": "wasm-pack build compiler --target web --dev --out-dir ../pkg",
-		"wasm-build-dev": "npm run wasm-dev && npm run build-dev",
-		"wasm-build": "npm run wasm && npm run build",
-		"version": "node version-bump.mjs && git add manifest.json versions.json"
-	},
-	"keywords": [],
-	"author": "fenjalien",
-	"license": "Apache-2.0",
-	"devDependencies": {
-		"@types/node": "^20",
-		"@typescript-eslint/eslint-plugin": "^5",
-		"@typescript-eslint/parser": "^5",
-		"builtin-modules": "^3",
-		"esbuild": "^0.18",
-		"esbuild-plugin-inline-worker": "^0.1.1",
-		"typescript": "^5.1"
-	},
-	"dependencies": {
-		"fflate": "^0.8.1",
-		"js-untar": "^2.0.0",
-		"obsidian": "latest",
-		"obsidian-typst": "file:pkg",
-		"svgo": "^3.0.2",
-		"tslib": "^2"
-	}
+  "name": "obsidian-typst-plugin",
+  "version": "0.10.0",
+  "description": "Renders `typst` code blocks to images with Typst.",
+  "main": "main.js",
+  "scripts": {
+    "build-dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "wasm": "wasm-pack build compiler --target web --out-dir ../pkg",
+    "wasm-dev": "wasm-pack build compiler --target web --dev --out-dir ../pkg",
+    "wasm-build-dev": "npm run wasm-dev && npm run build-dev",
+    "wasm-build": "npm run wasm && npm run build",
+    "version": "node version-bump.mjs && git add manifest.json versions.json"
+  },
+  "keywords": [],
+  "author": "fenjalien",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/node": "^20",
+    "@typescript-eslint/eslint-plugin": "^5",
+    "@typescript-eslint/parser": "^5",
+    "builtin-modules": "^3",
+    "esbuild": "^0.18",
+    "esbuild-plugin-inline-worker": "^0.1.1",
+    "typescript": "^5.1",
+    "wasm-pack": "^0.13.0"
+  },
+  "dependencies": {
+    "fflate": "^0.8.1",
+    "js-untar": "^2.0.0",
+    "obsidian": "latest",
+    "obsidian-typst": "file:pkg",
+    "svgo": "^3.0.2",
+    "tslib": "^2"
+  }
 }

@@ -1,13 +1,13 @@
 {
-	"id": "typst",
-	"name": "Typst Renderer",
-	"version": "0.10.0",
-	"minAppVersion": "1.0.0",
-	"description": "Renders `typst` code blocks and math blocks with Typst.",
-	"author": "fenjalien",
-	"authorUrl": "https://github.com/fenjalien",
-	"fundingUrl": {
-		"GitHub Sponsor": "https://github.com/sponsors/fenjalien",
-		"ko-fi": "https://ko-fi.com/fenjalien"
-	}
+  "id": "typst",
+  "name": "Typst Renderer",
+  "version": "0.10.0",
+  "minAppVersion": "1.0.0",
+  "description": "Renders `typst` code blocks and math blocks with Typst.",
+  "author": "fenjalien",
+  "authorUrl": "https://github.com/fenjalien",
+  "fundingUrl": {
+    "GitHub Sponsor": "https://github.com/sponsors/fenjalien",
+    "ko-fi": "https://ko-fi.com/fenjalien"
+  }
 }
