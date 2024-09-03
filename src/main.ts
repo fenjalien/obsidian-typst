@@ -53,7 +53,7 @@ export default class TypstPlugin extends Plugin {
 
     tex2chtml: any;
 
-    prevCanvasHeight: number = 0;
+    prevCanvasHeight = 0;
     textEncoder: TextEncoder
     fs: any;
 
@@ -100,7 +100,7 @@ export default class TypstPlugin extends Plugin {
         if (Platform.isDesktopApp) {
             this.compilerWorker.postMessage({ type: "canUseSharedArrayBuffer", data: true });
             this.fs = require("fs")
-            let fonts = await Promise.all(
+            const fonts = await Promise.all(
                 //@ts-expect-error
                 (await window.queryLocalFonts() as Array)
                     .filter((font: { family: string; name: string; }) => this.settings.font_families.contains(font.family.toLowerCase()))
@@ -153,7 +153,7 @@ export default class TypstPlugin extends Plugin {
         let data
         response = requestUrl(`https://api.github.com/repos/fenjalien/obsidian-typst/releases/tags/${PLUGIN_VERSION}`)
         data = await response.json
-        let asset = data.assets.find((a: any) => a.name == "obsidian_typst_bg.wasm")
+        const asset = data.assets.find((a: any) => a.name == "obsidian_typst_bg.wasm")
         if (asset == undefined) {
             throw "Could not find the correct file!"
         }
@@ -170,8 +170,8 @@ export default class TypstPlugin extends Plugin {
     }
 
     async getPackageList(): Promise<string[]> {
-        let getFolders = async (f: string) => (await this.app.vault.adapter.list(f)).folders
-        let packages = []
+        const getFolders = async (f: string) => (await this.app.vault.adapter.list(f)).folders
+        const packages = []
         // namespace
         for (const namespace of await getFolders(this.packagePath)) {
             // name
@@ -270,7 +270,7 @@ export default class TypstPlugin extends Plugin {
         try {
             const text = await (path.startsWith("@") ? this.preparePackage(path.slice(1)) : this.getFileString(path))
             if (text) {
-                let buffer = Int32Array.from(this.textEncoder.encode(
+                const buffer = Int32Array.from(this.textEncoder.encode(
                     text
                 ));
                 if (wbuffer.byteLength < (buffer.byteLength + 4)) {
@@ -320,7 +320,7 @@ export default class TypstPlugin extends Plugin {
 
     async preparePackage(spec: string): Promise<string | undefined> {
         if (Platform.isDesktopApp) {
-            let subdir = "/typst/packages/" + spec
+            const subdir = "/typst/packages/" + spec
 
             let dir = require('path').normalize(this.getDataDir() + subdir)
             if (this.fs.existsSync(dir)) {
@@ -421,7 +421,7 @@ export default class TypstPlugin extends Plugin {
     }
 
     createTypstRenderElement(path: string, source: string, display: boolean, math: boolean) {
-        let renderer = new TypstRenderElement();
+        const renderer = new TypstRenderElement();
         renderer.format = this.settings.format
         renderer.source = source
         renderer.path = path
@@ -504,7 +504,7 @@ class TypstSettingTab extends PluginSettingTab {
 
 
 
-        let no_fill = new Setting(containerEl)
+        const no_fill = new Setting(containerEl)
             .setName("No Fill (Transparent)")
             .setDisabled(this.plugin.settings.format == "svg")
             .addToggle((toggle) => {
@@ -518,7 +518,7 @@ class TypstSettingTab extends PluginSettingTab {
                     )
             });
 
-        let fill_color = new Setting(containerEl)
+        const fill_color = new Setting(containerEl)
             .setName("Fill Color")
             .setDisabled(this.plugin.settings.noFill || this.plugin.settings.format == "svg")
             .addColorPicker((picker) => {
@@ -531,7 +531,7 @@ class TypstSettingTab extends PluginSettingTab {
                     )
             })
 
-        let pixel_per_pt = new Setting(containerEl)
+        const pixel_per_pt = new Setting(containerEl)
             .setName("Pixel Per Point")
             .setDisabled(this.plugin.settings.format == "svg")
             .addSlider((slider) =>
@@ -618,7 +618,7 @@ class TypstSettingTab extends PluginSettingTab {
         deletePackagesBtn.addEventListener('click', () => {
             const selectedPackageElements = packageSettingsDiv.querySelectorAll('input[name="package-checkbox"]:checked')
 
-            let packagesToDelete: string[] = []
+            const packagesToDelete: string[] = []
 
             selectedPackageElements.forEach(pkgEl => {
                 packagesToDelete.push(pkgEl.getAttribute('value')!)

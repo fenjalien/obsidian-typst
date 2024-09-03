@@ -22,7 +22,8 @@
 		"builtin-modules": "^3",
 		"esbuild": "^0.18",
 		"esbuild-plugin-inline-worker": "^0.1.1",
-		"typescript": "^5.1"
+		"typescript": "^5.1",
+		"wasm-pack": "^0.13.0"
 	},
 	"dependencies": {
 		"fflate": "^0.8.1",
