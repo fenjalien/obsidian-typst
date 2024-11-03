@@ -1,4 +1,4 @@
-use std::{cell::Ref, collections::HashMap, ops::Range};
+use std::{collections::HashMap, ops::Range};
 
 use ariadne::{Config, FnCache, Label, Report, ReportKind};
 use typst::{
@@ -32,7 +32,7 @@ impl std::fmt::Display for Id {
 }
 
 pub fn format_diagnostic(
-    sources: Ref<HashMap<FileId, FileEntry>>,
+    sources: &HashMap<FileId, FileEntry>,
     diagnostics: &[SourceDiagnostic],
 ) -> String {
     let mut bytes = Vec::new();
@@ -53,7 +53,7 @@ pub fn format_diagnostic(
                 Severity::Warning => ReportKind::Warning,
             },
             diagnostic.message.to_string(),
-            &sources,
+            sources,
         );
 
         if !diagnostic.hints.is_empty() {
@@ -63,15 +63,10 @@ pub fn format_diagnostic(
 
         bytes.push(b'\n');
         for point in &diagnostic.trace {
-            build_report(
-                point.span,
-                ReportKind::Advice,
-                point.v.to_string(),
-                &sources,
-            )
-            .finish()
-            .write(&mut cache, &mut bytes)
-            .unwrap();
+            build_report(point.span, ReportKind::Advice, point.v.to_string(), sources)
+                .finish()
+                .write(&mut cache, &mut bytes)
+                .unwrap();
 
             bytes.push(b'\n');
         }
@@ -84,7 +79,7 @@ fn build_report<'a>(
     span: Span,
     report_kind: ReportKind<'a>,
     message: String,
-    sources: &Ref<HashMap<FileId, FileEntry>>,
+    sources: &HashMap<FileId, FileEntry>,
 ) -> ariadne::ReportBuilder<'a, (Id, Range<usize>)> {
     let config = Config::default().with_color(false).with_tab_width(2);
     let id = Id(span.id());
@@ -94,7 +89,7 @@ fn build_report<'a>(
         0..0
     };
 
-    Report::build(report_kind, id, range.start)
+    Report::build(report_kind, (id, range.clone()))
         .with_config(config)
         .with_message(message)
         .with_label(Label::new((id, range)))

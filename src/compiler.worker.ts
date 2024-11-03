@@ -50,7 +50,7 @@ function requestData(path: string): string {
     }
 }
 
-let compiler: typst.SystemWorld;
+let compiler: typst.Compiler;
 
 onmessage = (ev: MessageEvent<Message>) => {
     const message = ev.data
@@ -60,7 +60,7 @@ onmessage = (ev: MessageEvent<Message>) => {
             break;
         case "startup":
             typstInit(message.data.wasm).then(_ => {
-                compiler = new typst.SystemWorld("", requestData)
+                compiler = new typst.Compiler("", requestData)
                 console.log("Typst web assembly loaded!");
             })
             basePath = message.data.basePath
