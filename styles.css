@@ -84,6 +84,10 @@ typst-renderer {
 
 }
 
+.save-path-btn {
+    margin-left: 0.5em;
+}
+
 .delete-pkg-btn {
     margin-top: 1.5em;
     width: max-content;

@@ -1,4 +1,4 @@
-import { App, renderMath, HexString, Platform, Plugin, PluginSettingTab, Setting, loadMathJax, normalizePath, Notice, requestUrl } from 'obsidian';
+import { App, renderMath, HexString, Platform, Plugin, PluginSettingTab, Setting, loadMathJax, normalizePath, Notice, requestUrl, ButtonComponent } from 'obsidian';
 
 declare const PLUGIN_VERSION: string;
 
@@ -11,6 +11,7 @@ import { WorkerRequest } from './types';
 // @ts-ignore
 import untar from "js-untar"
 import { decompressSync } from "fflate"
+import { FolderSuggest } from './settings/folder-suggest';
 
 interface TypstPluginSettings {
     format: string,
@@ -26,6 +27,8 @@ interface TypstPluginSettings {
         code: string,
     },
     plugin_version: string,
+    usesCustomPackagePath: boolean,
+    customPackagePath: string,
     autoDownloadPackages: boolean
 }
 
@@ -43,6 +46,8 @@ const DEFAULT_SETTINGS: TypstPluginSettings = {
         code: "#set page(margin: (y: 1em, x: 0pt))"
     },
     plugin_version: PLUGIN_VERSION,
+    usesCustomPackagePath: false,
+    customPackagePath: "packages/",
     autoDownloadPackages: true
 }
 
@@ -68,7 +73,13 @@ export default class TypstPlugin extends Plugin {
         await this.loadSettings()
 
         this.pluginPath = this.app.vault.configDir + "/plugins/typst/"
-        this.packagePath = this.pluginPath + "packages/"
+
+        if (!this.settings.usesCustomPackagePath) {
+            this.packagePath = this.pluginPath + "packages/"
+        } else {
+            this.packagePath = this.settings.customPackagePath
+        }
+
         this.wasmPath = this.pluginPath + "obsidian_typst_bg.wasm"
 
         this.compilerWorker = (new CompilerWorker() as Worker);
@@ -467,6 +478,7 @@ export default class TypstPlugin extends Plugin {
 
 class TypstSettingTab extends PluginSettingTab {
     plugin: TypstPlugin;
+    pkgPath: string;
 
     constructor(app: App, plugin: TypstPlugin) {
         super(app, plugin);
@@ -593,6 +605,50 @@ class TypstSettingTab extends PluginSettingTab {
             addFontBtn.addEventListener('click', async () => addFontTag())
 
             this.renderFontTags(fontTagsDiv)
+
+            new Setting(containerEl)
+            .setName("Use custom path for packages")
+            .setDesc("If enabled, you need to define a path and click on the Save button. If the path is '/' it will be redirected to 'packages/' by default.")
+            .addToggle((toggle) => {
+                toggle
+                    .setValue(this.plugin.settings.usesCustomPackagePath)
+                    .onChange(async (value) => {
+                        if (!value) {
+                            this.plugin.packagePath = this.plugin.pluginPath + "packages/"
+                        }
+                        this.plugin.settings.usesCustomPackagePath = value;
+                        await this.plugin.saveSettings();
+                        custom_path.setDisabled(!value)
+                    });
+            });
+            const savePackagePathButtonEl = new ButtonComponent(containerEl)
+            .setClass("save-path-btn")
+            .setIcon("save")
+            .onClick(async () => {
+                if (!await this.app.vault.adapter.exists(this.pkgPath)) {
+                    await this.app.vault.adapter.mkdir(this.pkgPath);
+                }
+                const path = this.pkgPath.endsWith("/") ? this.pkgPath : this.pkgPath + "/";
+                this.plugin.packagePath = path;
+                this.plugin.settings.customPackagePath = path;
+                await this.plugin.saveSettings();
+            });
+
+            let custom_path = new Setting(containerEl)
+                .setName("Packages Path")
+                .setDesc("Define a path to save the packages.")
+                .setDisabled(!this.plugin.settings.usesCustomPackagePath)
+                .addSearch((el) => {
+                    new FolderSuggest(this.app, el.inputEl);
+                    el.setPlaceholder("packages/")
+                        .setValue(this.plugin.settings.customPackagePath)
+                        .onChange((path) => {
+                            if (path) {
+                                this.pkgPath = path !== "/" ? normalizePath(path) : "packages";
+                            }
+                        });
+                });
+            custom_path.settingEl.appendChild(savePackagePathButtonEl.buttonEl);
 
             new Setting(containerEl)
                 .setName("Download Missing Packages")
